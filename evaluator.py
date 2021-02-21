@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 import numpy as np
 from torchvision import transforms
-from detectron2.engine.defaults import DefaultPredictor
 
 
 class MaxProbExtractor(nn.Module):

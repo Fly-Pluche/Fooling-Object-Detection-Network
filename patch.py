@@ -190,3 +190,71 @@ class PatchApplier(nn.Module):
         for adv in advs:
             img_batch = torch.where((adv > 0.000001), adv, img_batch)
         return img_batch
+
+
+class PatchVisualor(nn.Module):
+
+    def __init__(self):
+        super(PatchVisualor, self).__init__()
+
+    def forward(self):
+        pass
+
+
+class PatchGauss(nn.Module):
+    """
+    Produce patch use 2-dim gauss function
+    """
+
+    def __init__(self):
+        super(PatchGauss, self).__init__()
+        # create x and y coordinates
+        self.configs = patch_configs['base']()
+        base = torch.cuda.FloatTensor(range(0, self.configs.patch_size))
+        x_coordinates = base.unsqueeze(0)
+        x_coordinates = x_coordinates.expand(self.configs.patch_size, -1)
+        y_coordinates = base.unsqueeze(-1)
+        y_coordinates = y_coordinates.expand(-1, self.configs.patch_size)
+        self.xy_coordinates = torch.stack([x_coordinates, y_coordinates], dim=0)
+
+    def forward(self, coordinates):
+        # the total number of gauss function
+        gauss_num = coordinates.size()[1]
+        xy_coordinates = self.xy_coordinates.unsqueeze(1)
+        # [2,gauss_num,patch_size,patch_size]
+        xy_coordinates = xy_coordinates.expand(-1, gauss_num, -1, -1)
+        # [2, n]
+        coordinates = coordinates * self.configs.patch_size
+        # [2,n,1]
+        coordinates = coordinates.unsqueeze(-1)
+        # [2,n,1,1]
+        coordinates = coordinates.unsqueeze(-1)
+        # [2,n,patch_size,patch_size]
+        adv_patch = coordinates.expand(-1, -1, self.configs.patch_size, self.configs.patch_size).clone()
+        # produce the gray background patch
+        back_patch = torch.cuda.FloatTensor([0.16])
+        back_patch.unsqueeze_(0)
+        back_patch = back_patch.expand(self.configs.patch_size, self.configs.patch_size)
+        # calculate gauss function
+        adv_patch -= xy_coordinates
+        adv_patch *= adv_patch
+        adv_patch = torch.unbind(adv_patch, dim=0)
+        adv_patch = adv_patch[0] + adv_patch[1]
+        adv_patch /= (-2 * (4.07 ** 2))
+        adv_patch = torch.exp(adv_patch) * 0.92
+        adv_patch = self.add(adv_patch)
+        adv_patch += back_patch  # add background patch on the origin patch
+        # [patch size,patch size] ==> [3,patch size,patch size]
+        adv_patch = adv_patch.unsqueeze_(0).expand(3, -1, -1).clone()
+        adv_patch.clamp_(0, 1)
+        return adv_patch
+
+    def add(self, adv_patch):
+        adv_patch = torch.unbind(adv_patch, dim=0)
+        for i in range(1, len(adv_patch)):
+            adv_patch[0].add_(adv_patch[i])
+        return adv_patch[0]
+
+
+if __name__ == '__main__':
+    pass
