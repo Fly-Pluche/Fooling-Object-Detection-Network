@@ -133,7 +133,7 @@ class PatchTransformer(nn.Module):
         boxes_batch_scaled[:, :, 2] = boxes_batch[:, :, 2] * img_size[0]
         boxes_batch_scaled[:, :, 3] = boxes_batch[:, :, 3] * img_size[1]
         target_size = torch.sqrt_(
-            ((boxes_batch_scaled[:, :, 2].mul(0.2)) ** 2) + ((boxes_batch_scaled[:, :, 3].mul(0.2)) ** 2)
+            ((boxes_batch_scaled[:, :, 2].mul(0.3)) ** 2) + ((boxes_batch_scaled[:, :, 3].mul(0.3)) ** 2)
         )
         target_x = boxes_batch[:, :, 0].view(np.prod(batch_size))
         target_y = boxes_batch[:, :, 1].view(np.prod(batch_size))
@@ -167,7 +167,7 @@ class PatchTransformer(nn.Module):
         theta[:, 1, 2] = -tx * sin / scale + ty * cos / scale
 
         grid = F.affine_grid(theta, adv_batch.shape)
-        adv_batch_t = F.grid_sample(adv_batch, grid)
+        adv_batch_t = F.grid_sample(adv_batch, grid, align_corners=True)
         adv_batch_t = adv_batch_t.view(s[0], s[1], s[2], s[3], s[4])
 
         adv_batch_t = torch.clamp(adv_batch_t, 0, 0.999999)
@@ -232,27 +232,28 @@ class PatchGauss(nn.Module):
         # [2,n,patch_size,patch_size]
         adv_patch = coordinates.expand(-1, -1, self.configs.patch_size, self.configs.patch_size).clone()
         # produce the gray background patch
-        back_patch = torch.cuda.FloatTensor([0.16])
-        back_patch.unsqueeze_(0)
+        back_patch = torch.cuda.FloatTensor([0.35])
+        back_patch = back_patch.unsqueeze(0)
         back_patch = back_patch.expand(self.configs.patch_size, self.configs.patch_size)
         # calculate gauss function
-        adv_patch -= xy_coordinates
-        adv_patch *= adv_patch
+        adv_patch = adv_patch - xy_coordinates
+        adv_patch = adv_patch ** 2
         adv_patch = torch.unbind(adv_patch, dim=0)
         adv_patch = adv_patch[0] + adv_patch[1]
-        adv_patch /= (-2 * (4.07 ** 2))
-        adv_patch = torch.exp(adv_patch) * 0.92
+        adv_patch = adv_patch / (-2 * (6.07 ** 2))
+        adv_patch = torch.exp(adv_patch) * 1
         adv_patch = self.add(adv_patch)
-        adv_patch += back_patch  # add background patch on the origin patch
-        # [patch size,patch size] ==> [3,patch size,patch size]
-        adv_patch = adv_patch.unsqueeze_(0).expand(3, -1, -1).clone()
-        adv_patch.clamp_(0, 1)
+        adv_patch = adv_patch + back_patch  # add background patch on the origin patch
+        # [patch size,patch size] ==> [3, patch size, patch size]
+        adv_patch = adv_patch.unsqueeze(0)
+        adv_patch = adv_patch.expand(3, -1, -1).clone()
+        adv_patch = adv_patch.clamp(0, 1)
         return adv_patch
 
     def add(self, adv_patch):
-        adv_patch = torch.unbind(adv_patch, dim=0)
+        adv_patch = list(torch.unbind(adv_patch, dim=0))
         for i in range(1, len(adv_patch)):
-            adv_patch[0].add_(adv_patch[i])
+            adv_patch[0] = torch.add(adv_patch[0], adv_patch[i])
         return adv_patch[0]
 
 

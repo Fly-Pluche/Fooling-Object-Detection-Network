@@ -18,7 +18,7 @@ class BaseConfig(object):
         self.save_adv_patch_path = '/home/corona/attack/PaperCode2/patches'
         self.patch_size = 300
 
-        self.start_learning_rate = 0.025
+        self.start_learning_rate = 0.0025
 
         self.patch_name = 'base'
 
@@ -29,6 +29,8 @@ class BaseConfig(object):
         self.loss_target = lambda obj, cls: obj * cls
         # width height
         self.img_size = (416, 416)
+        # the number of gauss function
+        self.gauss_num = 20
 
 
 class Experiment1(BaseConfig):

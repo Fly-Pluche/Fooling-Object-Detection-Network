@@ -10,7 +10,7 @@ from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import DataLoader
 from load_data import ListDataset
 from torchvision import transforms
-from patch import PatchTransformer, PatchApplier
+from patch import PatchTransformer, PatchApplier, PatchGauss
 from evaluator import MaxProbExtractor, TotalVariation
 from tqdm import tqdm
 import matplotlib.pyplot as plt
@@ -26,17 +26,18 @@ class PatchTrainer(object):
     def __init__(self):
         super(PatchTrainer, self).__init__()
         self.config = patch_configs['base']()  # load base config
-        self.faster_rcnn = FasterRCNN()
+        self.model_ = FasterRCNN()
         self.writer = self.init_tensorboard(name='base')
         self.patch_transformer = PatchTransformer().cuda()
         self.patch_applier = PatchApplier().cuda()
         self.max_prob_extractor = MaxProbExtractor().cuda()
         self.total_variation = TotalVariation().cuda()
+        self.patch_gauss = PatchGauss().cuda()
 
     def init_tensorboard(self, name=None):
         if name is not None:
             time_str = time.strftime("%Y%m%d-%H%M%S")
-            return SummaryWriter(f'runs/{time_str}_{name}')
+            return SummaryWriter(f'/home/corona/attack/Fooling-Object-Detection-Network/logs/{time_str}_{name}')
         else:
             return SummaryWriter()
 
@@ -55,11 +56,11 @@ class PatchTrainer(object):
 
         epoch_length = len(train_data)
         # generate a gray patch
-        adv_patch_cpu = self.generate_patch()
-        adv_patch_cpu.requires_grad_(True)
+        adv_gauss_cpu = self.generate_gauss()
+        adv_gauss_cpu.requires_grad_(True)
 
         # use adam to update adv_patch
-        optimizer = torch.optim.Adam([adv_patch_cpu], lr=self.config.start_learning_rate)
+        optimizer = torch.optim.Adam([adv_gauss_cpu], lr=self.config.start_learning_rate)
         scheduler = self.config.scheduler_factory(optimizer)  # used to update learning rate
 
         for epoch in range(1000):
@@ -72,17 +73,25 @@ class PatchTrainer(object):
                 image_batch = image_batch.cuda()
                 labels_batch = labels_batch.cuda()
                 boxes_batch = boxes_batch.cuda()
-                adv_patch = adv_patch_cpu.cuda()
+                adv_gauss = adv_gauss_cpu.cuda()
+                adv_patch = self.patch_gauss(adv_gauss)
                 adv_batch_t = self.patch_transformer(adv_patch, boxes_batch, labels_batch)
                 p_img_batch = self.patch_applier(image_batch, adv_batch_t)
                 p_img_batch = F.interpolate(p_img_batch, (self.config.img_size[1], self.config.img_size[0]))
 
-                max_prob = self.max_prob_extractor(self.faster_rcnn, p_img_batch)
+                # img = p_img_batch[1, :, :, ]
+                # img = transforms.ToPILImage()(img.detach().cpu())
+                # img = np.asarray(img)
+                # plt.imshow(img)
+                # plt.show()
+                # exit()
+
+                max_prob = self.max_prob_extractor(self.model_, p_img_batch)
 
                 tv = self.total_variation(adv_patch)
 
-                tv_loss = tv * 2.5
-                det_loss = torch.mean(max_prob)
+                tv_loss = tv
+                det_loss = torch.mean(max_prob) * 2
                 loss = det_loss + torch.max(tv_loss, torch.tensor(0.1).cuda())
 
                 ep_det_loss += det_loss.detach().cpu().numpy()
@@ -91,7 +100,12 @@ class PatchTrainer(object):
                 loss.backward()
                 optimizer.step()
                 optimizer.zero_grad()
-                adv_patch_cpu.data.clamp_(0, 1)  # keep patch in image range
+                adv_gauss_cpu.data.clamp_(0, 1)  # keep
+
+                if det_loss.detach().cpu().numpy() < 0.8:
+                    img = np.asarray(transforms.ToPILImage()(adv_patch.detach().cpu()))
+                    name = './patches/'+str(epoch) + '_' + str(i_batch) + '_' + str(int(det_loss * 10)) + '.jpg'
+                    cv2.imwrite(name, img)
 
                 if i_batch % 5 == 0:
                     iteration = epoch_length * epoch + i_batch
@@ -100,7 +114,7 @@ class PatchTrainer(object):
                     self.writer.add_scalar('loss/tv_loss', tv_loss.detach().cpu().numpy(), iteration)
                     self.writer.add_scalar('misc/epoch', epoch, iteration)
                     self.writer.add_scalar('misc/learning_rate', optimizer.param_groups[0]["lr"], iteration)
-                    self.writer.add_image('patch', adv_patch_cpu, iteration)
+                    self.writer.add_image('patch', adv_patch.cpu(), iteration)
 
                 if i_batch + 1 >= len(train_data):
                     print('\n')
@@ -110,10 +124,11 @@ class PatchTrainer(object):
                     torch.cuda.empty_cache()
 
             # save adversarial patch
-            adv_patch_save = adv_patch_cpu.clone()
-            adv_patch_save = transforms.ToPILImage()(adv_patch_save.detach().cpu())
-            adv_patch_save = np.asarray(np.uint8(adv_patch_save))
-            cv2.imwrite(os.path.join(self.config.save_adv_patch_path, str(epoch) + '.jpg'), adv_patch_save)
+            # with torch.no_grad():
+            #     adv_patch_save = self.patch_gauss(adv_gauss_cpu.cuda())
+            #     adv_patch_save = transforms.ToPILImage()(adv_patch_save.detach().cpu())
+            #     adv_patch_save = np.asarray(np.uint8(adv_patch_save))
+            #     cv2.imwrite(os.path.join(self.config.save_adv_patch_path, str(epoch) + '.jpg'), adv_patch_save)
 
             ep_det_loss = ep_det_loss / len(train_data)
             ep_tv_loss = ep_tv_loss / len(train_data)
@@ -131,3 +146,6 @@ class PatchTrainer(object):
 
     def generate_patch(self):
         return torch.full((3, self.config.patch_size, self.config.patch_size), 0.5)
+
+    def generate_gauss(self):
+        return torch.rand(2, self.config.gauss_num)
