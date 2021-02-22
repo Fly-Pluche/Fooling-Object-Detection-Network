@@ -26,7 +26,7 @@ class PatchTrainer(object):
     def __init__(self):
         super(PatchTrainer, self).__init__()
         self.config = patch_configs['base']()  # load base config
-        self.model_ = FasterRCNN()
+        self.model_ = RetinaNet()
         self.writer = self.init_tensorboard(name='base')
         self.patch_transformer = PatchTransformer().cuda()
         self.patch_applier = PatchApplier().cuda()
@@ -91,7 +91,8 @@ class PatchTrainer(object):
                 tv = self.total_variation(adv_patch)
 
                 tv_loss = tv
-                det_loss = torch.mean(max_prob) * 2
+                det_loss = torch.sum(max_prob ** 2)
+                print(det_loss)
                 loss = det_loss + torch.max(tv_loss, torch.tensor(0.1).cuda())
 
                 ep_det_loss += det_loss.detach().cpu().numpy()
@@ -104,7 +105,7 @@ class PatchTrainer(object):
 
                 if det_loss.detach().cpu().numpy() < 0.8:
                     img = np.asarray(transforms.ToPILImage()(adv_patch.detach().cpu()))
-                    name = './patches/'+str(epoch) + '_' + str(i_batch) + '_' + str(int(det_loss * 10)) + '.jpg'
+                    name = './patches/' + str(epoch) + '_' + str(i_batch) + '_' + str(int(det_loss * 10)) + '.jpg'
                     cv2.imwrite(name, img)
 
                 if i_batch % 5 == 0:
@@ -136,10 +137,11 @@ class PatchTrainer(object):
 
             scheduler.step(ep_loss)
             if True:
+                self.writer.add_scalar('ep_det_loss', ep_det_loss, epoch)
                 print('  EPOCH NR: ', epoch),
                 print('EPOCH LOSS: ', ep_loss)
-            print('  DET LOSS: ', ep_det_loss)
-            print('   TV LOSS: ', ep_tv_loss)
+                print('  DET LOSS: ', ep_det_loss)
+                print('   TV LOSS: ', ep_tv_loss)
             # del adv_batch_t, output, max_prob, det_loss, p_img_batch, nps_loss, tv_loss, loss
             del adv_batch_t, max_prob, det_loss, p_img_batch, tv_loss, loss
             torch.cuda.empty_cache()

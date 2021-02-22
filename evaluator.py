@@ -46,5 +46,22 @@ class TotalVariation(nn.Module):
         return tv / torch.numel(adv_patch)
 
 
+class PatchEvaluator(nn.Module):
+    def __init__(self):
+        super(PatchEvaluator, self).__init__()
+
+    def forward(self):
+        pass
+
+
 if __name__ == '__main__':
-    pass
+    import sys
+    x = list(sys.argv)
+    for item in x[1:]:
+        print("ENTER YOUR WORD")
+        y = list(input().split(' '))
+        if item in y:
+            print("yes")
+            break
+        else:
+            print("nope")

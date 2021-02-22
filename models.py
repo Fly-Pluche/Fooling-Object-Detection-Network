@@ -13,18 +13,39 @@ from torch import nn
 from utils.img_tools import ImageTools
 from predict import Predictor
 
+
 class BaseModel(nn.Module):
     def __init__(self, model):
         super(BaseModel, self).__init__()
+        self.output = None
         self.cfg = get_cfg()
         self.cfg.merge_from_file(model_zoo.get_config_file(model))
         self.cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = 0.5  # set threshold for this model
         self.cfg.MODEL.WEIGHTS = model_zoo.get_checkpoint_url(model)
-
         self.predictor = Predictor(self.cfg)
+        self.default_predictor = DefaultPredictor(self.cfg)
 
     def forward(self, img):
+        """
+        predict instances in the image
+        img: torch float [n, C, H, W]
+        """
         return self.predictor(img)
+
+    def default_predictor(self, img):
+        """
+        use detectron2 default predictor to predict
+        img: a image read by cv2 or PIL
+        """
+        return self.default_predictor(img)
+
+    def visual_instance_predictions(self, img, output):
+        """
+        draw instance boxes on the image
+        """
+        v = Visualizer(img[:, :, ::-1], MetadataCatalog.get(self.cfg.DATASETS.TRAIN[0]), scale=1.0)
+        out = v.draw_instance_predictions(output["instances"].to('cpu'))
+        return out.get_image()[:, :, ::-1]
 
     def trainer(self, train_datasets_name, num_workers=2, img_per_batch=2, base_lr=1e-3, max_iter=300,
                 batch_size_per_image=128, num_classes=1, output_dir='outs'
