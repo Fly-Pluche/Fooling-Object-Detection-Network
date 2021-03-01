@@ -79,9 +79,9 @@ class PatchTrainer(object):
                 adv_gauss = adv_gauss_cpu.cuda()
                 adv_patch = self.patch_gauss(adv_gauss)
                 ap50 = attack_evaluator(adv_patch)
-                print('===='*100)
+                print('====' * 100)
                 print(ap50)
-                print('===='*100)
+                print('====' * 100)
                 adv_batch_t = self.patch_transformer(adv_patch, boxes_batch, labels_batch)
                 p_img_batch = self.patch_applier(image_batch, adv_batch_t)
                 p_img_batch = F.interpolate(p_img_batch, (self.config.img_size[1], self.config.img_size[0]))
@@ -94,7 +94,6 @@ class PatchTrainer(object):
                 # exit()
 
                 max_prob = self.max_prob_extractor(self.model_, p_img_batch)
-
 
                 tv = self.total_variation(adv_patch)
 
