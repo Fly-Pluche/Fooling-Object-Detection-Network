@@ -24,6 +24,7 @@ class ListDataset(Dataset):
         image_info = self.parser.load_image(image_path, mode='cv2')
         image, boxes = self.pad_and_scale(image_info['image'], image_info['boxes'])
         boxes, labels = self.pad_lab_and_boxes(boxes, image_info['labels'])
+
         image = transforms.ToTensor()(image)
         return image, boxes, labels
 

@@ -11,7 +11,7 @@ from torch.utils.data import DataLoader
 from load_data import ListDataset
 from torchvision import transforms
 from patch import PatchTransformer, PatchApplier, PatchGauss
-from evaluator import MaxProbExtractor, TotalVariation
+from evaluator import MaxProbExtractor, TotalVariation, PatchEvaluator
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import torch.nn.functional as F
@@ -63,6 +63,9 @@ class PatchTrainer(object):
         optimizer = torch.optim.Adam([adv_gauss_cpu], lr=self.config.start_learning_rate)
         scheduler = self.config.scheduler_factory(optimizer)  # used to update learning rate
 
+        # create a evaluator for adv patch
+        attack_evaluator = PatchEvaluator(self.model_, train_data)
+
         for epoch in range(1000):
             ep_det_loss = 0
             ep_tv_loss = 0
@@ -75,6 +78,10 @@ class PatchTrainer(object):
                 boxes_batch = boxes_batch.cuda()
                 adv_gauss = adv_gauss_cpu.cuda()
                 adv_patch = self.patch_gauss(adv_gauss)
+                ap50 = attack_evaluator(adv_patch)
+                print('===='*100)
+                print(ap50)
+                print('===='*100)
                 adv_batch_t = self.patch_transformer(adv_patch, boxes_batch, labels_batch)
                 p_img_batch = self.patch_applier(image_batch, adv_batch_t)
                 p_img_batch = F.interpolate(p_img_batch, (self.config.img_size[1], self.config.img_size[0]))
@@ -88,11 +95,12 @@ class PatchTrainer(object):
 
                 max_prob = self.max_prob_extractor(self.model_, p_img_batch)
 
+
                 tv = self.total_variation(adv_patch)
 
                 tv_loss = tv
                 det_loss = torch.sum(max_prob ** 2)
-                print(det_loss)
+
                 loss = det_loss + torch.max(tv_loss, torch.tensor(0.1).cuda())
 
                 ep_det_loss += det_loss.detach().cpu().numpy()
@@ -130,12 +138,19 @@ class PatchTrainer(object):
             #     adv_patch_save = transforms.ToPILImage()(adv_patch_save.detach().cpu())
             #     adv_patch_save = np.asarray(np.uint8(adv_patch_save))
             #     cv2.imwrite(os.path.join(self.config.save_adv_patch_path, str(epoch) + '.jpg'), adv_patch_save)
+            # evaluate the model after attacking
 
             ep_det_loss = ep_det_loss / len(train_data)
             ep_tv_loss = ep_tv_loss / len(train_data)
             ep_loss = ep_loss / len(train_data)
 
             scheduler.step(ep_loss)
+
+            # adv_gauss = adv_gauss_cpu.cuda()
+            # adv_patch = self.patch_gauss(adv_gauss)
+            # result = attack_evaluator(adv_patch)
+            # print(result)
+
             if True:
                 self.writer.add_scalar('ep_det_loss', ep_det_loss, epoch)
                 print('  EPOCH NR: ', epoch),

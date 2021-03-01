@@ -24,6 +24,7 @@ class BaseModel(nn.Module):
         self.cfg.MODEL.WEIGHTS = model_zoo.get_checkpoint_url(model)
         self.predictor = Predictor(self.cfg)
         self.default_predictor = DefaultPredictor(self.cfg)
+        self.model = self.predictor.model
 
     def forward(self, img):
         """
