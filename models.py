@@ -12,7 +12,7 @@ from detectron2.data import MetadataCatalog, DatasetCatalog
 from torch import nn
 from utils.img_tools import ImageTools
 from predict import Predictor
-
+from utils.visualizer import Visualizer_
 
 class BaseModel(nn.Module):
     def __init__(self, model):
@@ -40,11 +40,11 @@ class BaseModel(nn.Module):
         """
         return self.default_predictor(img)
 
-    def visual_instance_predictions(self, img, output):
+    def visual_instance_predictions(self, img, output,mode='tensor'):
         """
         draw instance boxes on the image
         """
-        v = Visualizer(img[:, :, ::-1], MetadataCatalog.get(self.cfg.DATASETS.TRAIN[0]), scale=1.0)
+        v = Visualizer_(img, self,mode=mode)
         out = v.draw_instance_predictions(output["instances"].to('cpu'))
         return out.get_image()[:, :, ::-1]
 

@@ -14,9 +14,9 @@ class BaseConfig(object):
         self.lab_dir = "/home/corona/datasets/flir_yolo/train/labels"
         self.config_file = "/home/corona/attack/PaperCode/configs/yolo_person.cfg"
         self.weight_file = "/home/corona/attack/PyTorch-YOLOv3/good_weights/yolov3_ckpt_98.pth"
-        self.txt_path = '/home/corona/datasets/flir_yolo/train/train.txt'
-        self.save_adv_patch_path = '/home/corona/attack/PaperCode2/patches'
-        self.patch_size = 300
+        self.txt_path = '/home/corona/datasets/WiderPerson/train/train.txt'
+        self.save_adv_patch_path = '/home/corona/attack/Fooling-Object-Detection-Network/patches'
+        self.patch_size = 200
 
         self.start_learning_rate = 0.0025
 

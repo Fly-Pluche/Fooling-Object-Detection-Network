@@ -2,26 +2,45 @@ from __future__ import absolute_import
 import torch
 import cv2
 import numpy as np
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
 from utils.parse_annotations import ParseTools
 import torch.nn.functional as F
 from patch_config import patch_configs
 from torchvision import transforms
 from PIL import Image
 
+# set random seed
+torch.manual_seed(2233)
+torch.cuda.manual_seed(2233)
+np.random.seed(2233)
 
-# load yolo datasets
+
+# load datasets
 class ListDataset(Dataset):
-    def __init__(self, txt):
+    """
+    load datasets from a txt file which contains the path of the image file (yolo datasets' type)
+    Args:
+        txt: the txt file path
+        number: how many pictures you want to load. default is all the image
+    item:
+        image: np array [w,h,3]
+        boxes: [max_lab,4]
+        labels: [-1,4]
+    """
+
+    def __init__(self, txt, number=None):
         super(ListDataset, self).__init__()
         self.parser = ParseTools()
         self.configs = patch_configs['base']()
-        self.img_list = self.parser.load_images_txt(txt)
+        if number is None:
+            self.img_list = self.parser.load_images_txt(txt)
+        else:
+            self.img_list = self.parser.load_images_txt(txt)[:number]
         self.max_lab = 17
 
     def __getitem__(self, id):
         image_path = self.img_list[id]
-        image_info = self.parser.load_image(image_path, mode='cv2')
+        image_info = self.parser.load_image(image_path, mode='numpy')  # load a rgb type image
         image, boxes = self.pad_and_scale(image_info['image'], image_info['boxes'])
         boxes, labels = self.pad_lab_and_boxes(boxes, image_info['labels'])
 
@@ -54,7 +73,7 @@ class ListDataset(Dataset):
             if dim_to_pad == 1:
                 padding = (h - w) / 2
                 padded_img = Image.new('RGB', (h, h), color=(127, 127, 127))
-                padded_img.paste(image, (int(padding)), 0)
+                padded_img.paste(image, (int(padding), 0))
                 boxes[:, 0] = (boxes[:, 0] * w + padding) / h
                 boxes[:, 2] = (boxes[:, 2] * w) / h
             else:
@@ -63,9 +82,27 @@ class ListDataset(Dataset):
                 padded_img.paste(image, (0, int(padding)))
                 boxes[:, 1] = (boxes[:, 1] * h + padding) / w
                 boxes[:, 3] = (boxes[:, 3] * h) / w
+
         resize = transforms.Resize((self.configs.img_size[0], self.configs.img_size[1]))
         padded_img = resize(padded_img)
         return padded_img, boxes
+
+
+def load_test_data_loader(txt, number=10):
+    """
+    load test data loader
+    Args:
+        txt: the txt file of the datasets (datasets format is the yolo datasets format)
+        number: how many images you want to load
+    """
+    dataset = ListDataset(txt, number=number)
+    data_loader = DataLoader(
+        dataset,
+        batch_size=1,
+        num_workers=8,
+        shuffle=True,
+    )
+    return data_loader
 
 
 if __name__ == '__main__':

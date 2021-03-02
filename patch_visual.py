@@ -9,7 +9,7 @@ from patch import PatchApplier
 from torch.utils.data import DataLoader
 from PIL import Image
 from load_data import ListDataset
-from torchvision import transforms
+from torchvision.transforms import functional
 from models import FasterRCNN
 
 # set random seed
@@ -40,8 +40,8 @@ class PatchVisual(nn.Module):
         """
         # load path image and turn it to torch's format
         adv_patch = Image.open(patch_path)
-        adv_patch = transforms.PILToTensor()(adv_patch).cuda()
-        adv_patch = adv_patch / 255
+        adv_patch = functional.pil_to_tensor(adv_patch).cuda()
+        adv_patch = adv_patch / 255.
         # load a image information
         image, boxes, label = data
         image = image.cuda()
@@ -51,7 +51,7 @@ class PatchVisual(nn.Module):
         adv_patch_t = self.patch_transformer(adv_patch, boxes, label)
         image = self.patch_applier(image, adv_patch_t)
         image = image[0].detach().cpu()
-        image = np.asarray(transforms.ToPILImage()(image))
+        image = np.asarray(functional.to_pil_image(image))
         return image
 
 
@@ -61,7 +61,7 @@ if __name__ == '__main__':
     data = next(visual.data)
     data = next(visual.data)
     data = next(visual.data)
-    image = np.asarray(transforms.ToPILImage()(data[0][0].detach().cpu()))
+    image = np.asarray(functional.to_pil_image(data[0][0].detach().cpu()))
     image_attack = visual('/home/corona/attack/Fooling-Object-Detection-Network/patches/32.jpg', data)
     image_gray_patch = visual('./patches/gray.jpg', data)
     model = FasterRCNN()

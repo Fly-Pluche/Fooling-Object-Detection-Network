@@ -3,6 +3,7 @@ parse annotations to get information
 """
 import cv2
 import os
+import numpy as np
 from PIL import Image
 
 
@@ -12,7 +13,7 @@ class ParseTools:
         pass
 
     # parse boxes and labels information from one image's annotation file
-    # size: [weight, height]
+    # size: [width, height]
     def parse_boxes_labels(self, size, ann_path,
                            is_xywh2xyxy=False, is_xyxy2xywh=False, is_xywh2xyxy_keep=False):
         with open(ann_path, 'r') as f:
@@ -23,7 +24,7 @@ class ParseTools:
             label = int(box.split(' ')[0])
             box = box.split(' ')[1:]
             box = [float(item.replace('\n', '')) for item in box]
-            if len(box) == 0:
+            if len(box) == 0 or box == []:
                 continue
             labels.append(label)
             if is_xywh2xyxy:
@@ -52,11 +53,16 @@ class ParseTools:
         """
         if mode == 'cv2':
             image = cv2.imread(image_path)
-            # image_size: [weight, height]
+            # image_size: [width, height]
             image_size = (image.shape[1], image.shape[0])
+        elif mode == 'numpy':
+            image = Image.open(image_path)
+            image_size = (image.size[0], image.size[1])
+            image = np.asarray(image)
         else:
             image = Image.open(image_path)
             image_size = (image.size[0], image.size[1])
+
         image_name = image_path.split('/')[-1]
         ann_path = os.path.join("/".join(image_path.split('/')[:-2]), 'labels', image_name.split('.')[0] + '.txt')
 
@@ -64,7 +70,7 @@ class ParseTools:
                                                 is_xyxy2xywh_keep)
         return {'image': image, 'image_name': image_name, 'image_size': image_size, 'boxes': boxes, 'labels': labels}
 
-    # size: [weight,height] box: (x,y,w,h)
+    # size: [width,height] box: (x,y,w,h)
     # return: (x_min, y_min, x_max, y_max)
     def xywh2xyxy(self, size, box) -> tuple:
         dw = size[0]
@@ -77,7 +83,7 @@ class ParseTools:
         y_max = y_min + h
         return (x_min, y_min, x_max, y_max)
 
-    # size: [weight,height] box: (x,y,w,h)
+    # size: [width,height] box: (x,y,w,h)
     # return: (x_min, y_min, x_max, y_max)   [0,1]
     def xywh2xyxy_keep(self, box):
         x_min = box[0] - box[2] / 2

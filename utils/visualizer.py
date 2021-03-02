@@ -3,13 +3,16 @@ import torch
 import numpy as np
 from detectron2.utils.visualizer import Visualizer
 from detectron2.utils.visualizer import _create_text_labels
-from torchvision import transforms
+from torchvision.transforms import functional
+from detectron2.data import MetadataCatalog
 
-
-class PatchVisualizer(Visualizer):
-    def __init__(self, img_tensor, model, threshold=0.5):
-        img_rgb = self.tensor2rgb(img_tensor)
-        super(PatchVisualizer, self).__init__(img_rgb[:, :, ::-1], model.cfg.DATASETS.TRAIN[0])
+class Visualizer_(Visualizer):
+    def __init__(self, img, model, threshold=0.5, mode='tensor'):
+        if mode == 'tensor':
+            img_rgb = self.tensor2rgb(img)
+        else:
+            img_rgb = img
+        super(Visualizer_, self).__init__(img_rgb[:, :, ::-1], MetadataCatalog.get(model.cfg.DATASETS.TRAIN[0]))
         self.threshold = threshold
 
     def tensor2rgb(self, img):
@@ -20,7 +23,7 @@ class PatchVisualizer(Visualizer):
         return:
             a rgb numpy array
         """
-        img = transforms.ToPILImage()(img)
+        img = functional.to_pil_image(img)
         img = np.asarray(img)
         return img
 

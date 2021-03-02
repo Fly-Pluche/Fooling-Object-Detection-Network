@@ -46,7 +46,7 @@ class PatchTrainer(object):
         optimizer a adversarial patch
         """
         # load train datasets
-        datasets = ListDataset(self.config.txt_path)
+        datasets = ListDataset(self.config.txt_path, 500)
         train_data = DataLoader(
             datasets,
             batch_size=self.config.batch_size,
@@ -57,14 +57,14 @@ class PatchTrainer(object):
         epoch_length = len(train_data)
         # generate a gray patch
         adv_patch_cpu = self.generate_patch(
-            load_from_file='/home/corona/attack/Fooling-Object-Detection-Network/images/OIP.jpeg')
+            load_from_file='/home/corona/attack/Fooling-Object-Detection-Network/images/fg.jpeg')
         adv_patch_cpu.requires_grad_(True)
 
         # use adam to update adv_patch
         optimizer = torch.optim.Adam([adv_patch_cpu], lr=self.config.start_learning_rate)
         scheduler = self.config.scheduler_factory(optimizer)  # used to update learning rate
 
-        for epoch in range(1000):
+        for epoch in range(100):
             ep_det_loss = 0
             ep_tv_loss = 0
             ep_loss = 0
