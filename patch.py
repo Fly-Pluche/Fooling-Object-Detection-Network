@@ -3,12 +3,17 @@ import cv2
 import torch
 import math
 import numpy as np
+import matplotlib.pyplot as plt
 from torch import nn
 from patch_config import patch_configs
 import torch.nn.functional as F
 from torch.nn.modules.utils import _pair, _quadruple
 from torchvision import transforms
-import matplotlib.pyplot as plt
+from torchvision.transforms import functional
+from utils.transforms import TensorToNumpy
+from PIL import Image
+from load_data import load_test_data_loader
+from models import RetinaNet
 
 
 class MedianPool2d(nn.Module):
@@ -193,12 +198,35 @@ class PatchApplier(nn.Module):
 
 
 class PatchVisualor(nn.Module):
+    """
+    visual batch applying on the origin image
+    """
 
     def __init__(self):
         super(PatchVisualor, self).__init__()
+        self.to_cuda = lambda tensor: tensor if tensor.device.type == 'cuda' else tensor.cuda()
+        self.patch_transformer = PatchTransformer().cuda()
+        self.patch_applier = PatchApplier().cuda()
 
-    def forward(self):
-        pass
+    def forward(self, image, boxes, labels, adv_patch):
+        """
+        Args:
+            image: a tensor [3,w,h]
+            boxes: a tensor [n,4]
+            label: a tensor [n]
+        """
+        image = self.to_cuda(image)  # [1,3,w,h]
+        boxes = self.to_cuda(boxes)  # [1,n,4]
+        labels = self.to_cuda(labels)  # [1,n]
+        if isinstance(adv_patch, str):
+            adv_patch = Image.open(adv_patch)
+            adv_patch = functional.pil_to_tensor(adv_patch) / 255.
+        adv_patch = self.to_cuda(adv_patch.cuda())
+        adv_patch_t = self.patch_transformer(adv_patch, boxes, labels)
+        image = self.patch_applier(image, adv_patch_t)  # [1,3,w,h]
+        image = image[0].detach().cpu()  # [3,w,h]
+        image = np.asarray(functional.to_pil_image(image))  # [w,h,3]
+        return image
 
 
 class PatchGauss(nn.Module):
@@ -258,4 +286,24 @@ class PatchGauss(nn.Module):
 
 
 if __name__ == '__main__':
-    pass
+    data_loader = load_test_data_loader('/home/corona/datasets/WiderPerson/train/train.txt', 10)
+    images, boxes, labels = list(iter(data_loader))[6]
+    adv_patch = '/home/corona/attack/Fooling-Object-Detection-Network/patches/fg_patch.png'
+    origin_image = np.array(functional.to_pil_image(images[0]))
+    visualor = PatchVisualor()
+    model = RetinaNet()
+    image = visualor(images, boxes, labels, adv_patch)
+    out = model.default_predictor(image)
+    img = model.visual_instance_predictions(image, out, mode='rgb')
+    out2 = model.default_predictor(origin_image)
+    img2 = model.visual_instance_predictions(origin_image, out2, mode='rgb')
+    gray_patch = torch.full((3, 200, 200), 0.5)
+    gray = visualor(images, boxes, labels, gray_patch)
+    out3 = model.default_predictor(gray)
+    img3 = model.visual_instance_predictions(gray, out3, mode='rgb')
+    plt.imshow(img2)
+    plt.show()
+    plt.imshow(img)
+    plt.show()
+    plt.imshow(img3)
+    plt.show()
