@@ -46,7 +46,7 @@ class PatchTrainer(object):
         optimizer a adversarial patch
         """
         # load train datasets
-        datasets = ListDataset(self.config.txt_path, 500)
+        datasets = ListDataset(self.config.txt_path, 3000)
         train_data = DataLoader(
             datasets,
             batch_size=self.config.batch_size,
@@ -85,6 +85,8 @@ class PatchTrainer(object):
 
                 tv_loss = tv * 2.5
                 det_loss = torch.mean(max_prob)
+                det_loss = 1 - det_loss
+                det_loss = torch.log2(1/det_loss)
                 loss = det_loss + torch.max(tv_loss, torch.tensor(0.1).cuda())
 
                 ep_det_loss += det_loss.detach().cpu().numpy()
@@ -146,3 +148,4 @@ class PatchTrainer(object):
 
 if __name__ == '__main__':
     pass
+5

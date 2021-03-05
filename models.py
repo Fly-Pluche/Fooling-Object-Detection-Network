@@ -14,6 +14,9 @@ from utils.img_tools import ImageTools
 from predict import Predictor
 from utils.visualizer import Visualizer_
 
+# import os
+# os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+
 class BaseModel(nn.Module):
     def __init__(self, model):
         super(BaseModel, self).__init__()
@@ -111,14 +114,17 @@ if __name__ == '__main__':
 
     t = ImageTools()
     faster = FasterRCNN()
-    im = cv2.imread('/home/corona/datasets/flir_yolo/train/images/06478.jpeg')
-    time1 = time.time()
-    outputs = faster(im)["instances"]
-    print(time.time() - time1)
-    classes = outputs.pred_classes
-    scores = outputs.scores
-    print(classes)
-    print(scores[classes == 0])
+    a = RetinaNet()
+    b = FastRCNN()
+    c = MaskRCNN()
+    # im = cv2.imread('/home/corona/datasets/flir_yolo/train/images/06478.jpeg')
+    # time1 = time.time()
+    # outputs = faster(im)["instances"]
+    # print(time.time() - time1)
+    # classes = outputs.pred_classes
+    # scores = outputs.scores
+    # print(classes)
+    # print(scores[classes == 0])
     # v = Visualizer(im[:, :, ::-1], MetadataCatalog.get(faster.cfg.DATASETS.TRAIN[0]), scale=1)
     # out = v.draw_instance_predictions(outputs["instances"].to("cpu"))
     # out = out.get_image()[:, :, ::-1]

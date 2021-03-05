@@ -3,6 +3,7 @@ import cv2
 import torch
 import math
 import numpy as np
+import matplotlib
 import matplotlib.pyplot as plt
 from torch import nn
 from patch_config import patch_configs
@@ -14,7 +15,12 @@ from utils.transforms import TensorToNumpy
 from PIL import Image
 from load_data import load_test_data_loader
 from models import RetinaNet
+from patch_config import patch_configs
+from utils.delaunay2D import Delaunay2D
 
+
+# import os
+# os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
 class MedianPool2d(nn.Module):
     """ Median pool (usable as median filter when stride=1) module.
@@ -207,6 +213,7 @@ class PatchVisualor(nn.Module):
         self.to_cuda = lambda tensor: tensor if tensor.device.type == 'cuda' else tensor.cuda()
         self.patch_transformer = PatchTransformer().cuda()
         self.patch_applier = PatchApplier().cuda()
+        self.patch_config = patch_configs['base']()
 
     def forward(self, image, boxes, labels, adv_patch):
         """
@@ -214,13 +221,17 @@ class PatchVisualor(nn.Module):
             image: a tensor [3,w,h]
             boxes: a tensor [n,4]
             label: a tensor [n]
+            adv_patch: a tensor float image [3,w,h] or a path about the patch image
+        return: a numpy type image [w, h, 3]
         """
         image = self.to_cuda(image)  # [1,3,w,h]
         boxes = self.to_cuda(boxes)  # [1,n,4]
         labels = self.to_cuda(labels)  # [1,n]
         if isinstance(adv_patch, str):
             adv_patch = Image.open(adv_patch)
-            adv_patch = functional.pil_to_tensor(adv_patch) / 255.
+            adv_patch = functional.pil_to_tensor(adv_patch)
+            adv_patch = functional.resize(adv_patch,
+                                          [self.patch_config.patch_size, self.patch_config.patch_size]) / 255.
         adv_patch = self.to_cuda(adv_patch.cuda())
         adv_patch_t = self.patch_transformer(adv_patch, boxes, labels)
         image = self.patch_applier(image, adv_patch_t)  # [1,3,w,h]
@@ -285,25 +296,94 @@ class PatchGauss(nn.Module):
         return adv_patch[0]
 
 
+class PatchDelaunay2D:
+    """
+    create Delaunay2D triangles for patch.
+    """
+
+    def __init__(self):
+        self.patch_config = patch_configs['base']()
+        self.dt = Delaunay2D()
+        self.seeds, self.dt_tris = self.create_patch_delaunay()
+
+    def create_patch_delaunay(self):
+        """
+        use delaunay to create triangles, you can change num to change the number of be produced triangles
+        return:
+            seeds: the [x,y] of points
+            tris: triangles' points
+        """
+        numSeeds = 160
+        radius = self.patch_config.patch_size
+        # seeds = radius * np.random.random((numSeeds, 2))
+        # seeds = list(seeds)
+        # seeds.append(np.array([0, 0]))
+        # seeds.append(np.array([self.patch_config.patch_size - 1, self.patch_config.patch_size - 1]))
+        seeds = []
+        num = 15
+        for i in range(0, num + 1):
+            x = i * self.patch_config.patch_size / num
+            for j in range(0, num + 1):
+                y = j * self.patch_config.patch_size / num
+                seeds.append([x, y])
+            # seeds.append(np.array([x, 0]))
+            # seeds.append(np.array([x, self.patch_config.patch_size - 1]))
+            # seeds.append(np.array([0, x]))
+            # seeds.append(np.array([self.patch_config.patch_size - 1, x]))
+        seeds = np.array(seeds)
+        center = np.mean(seeds, axis=0)
+        self.dt = Delaunay2D(center, 50 * radius)
+
+        # Insert all seeds one by one
+        for s in seeds:
+            self.dt.addPoint(s)
+
+        dt_tris = self.dt.exportTriangles()
+        return seeds, dt_tris
+
+    def visual(self):
+        # Create a plot with matplotlib.pyplot
+        fig, ax = plt.subplots()
+        ax.margins(0.1)
+        ax.set_aspect('equal')
+        plt.axis([-1, self.patch_config.patch_size + 1, -1, self.patch_config.patch_size + 1])
+        # Plot our Delaunay triangulation (plot in blue)
+        cx, cy = zip(*self.seeds)
+        ax.triplot(matplotlib.tri.Triangulation(cx, cy, self.dt_tris), 'bo--')
+        ax.axes.xaxis.set_visible(False)
+        ax.axes.yaxis.set_visible(False)
+        plt.show()
+
+
+
+
 if __name__ == '__main__':
-    data_loader = load_test_data_loader('/home/corona/datasets/WiderPerson/train/train.txt', 10)
-    images, boxes, labels = list(iter(data_loader))[6]
-    adv_patch = '/home/corona/attack/Fooling-Object-Detection-Network/patches/fg_patch.png'
-    origin_image = np.array(functional.to_pil_image(images[0]))
-    visualor = PatchVisualor()
-    model = RetinaNet()
-    image = visualor(images, boxes, labels, adv_patch)
-    out = model.default_predictor(image)
-    img = model.visual_instance_predictions(image, out, mode='rgb')
-    out2 = model.default_predictor(origin_image)
-    img2 = model.visual_instance_predictions(origin_image, out2, mode='rgb')
-    gray_patch = torch.full((3, 200, 200), 0.5)
-    gray = visualor(images, boxes, labels, gray_patch)
-    out3 = model.default_predictor(gray)
-    img3 = model.visual_instance_predictions(gray, out3, mode='rgb')
-    plt.imshow(img2)
-    plt.show()
-    plt.imshow(img)
-    plt.show()
-    plt.imshow(img3)
-    plt.show()
+    # data_loader = load_test_data_loader('/home/corona/datasets/WiderPerson/train/train.txt', 10)
+    # images, boxes, labels = list(iter(data_loader))[6]
+    # adv_patch = '/home/corona/attack/Fooling-Object-Detection-Network/patches/fg_patch.png'
+    # origin_image = np.array(functional.to_pil_image(images[0]))
+    # visualor = PatchVisualor()
+    # model = RetinaNet()
+    # image = visualor(images, boxes, labels, adv_patch)
+    # out = model.default_predictor(image)
+    # img = model.visual_instance_predictions(image, out, mode='rgb')
+    # out2 = model.default_predictor(origin_image)
+    # img2 = model.visual_instance_predictions(origin_image, out2, mode='rgb')
+    # gray_patch = torch.full((3, 200, 200), 0.5)
+    # gray = visualor(images, boxes, labels, gray_patch)
+    # out3 = model.default_predictor(gray)
+    # img3 = model.visual_instance_predictions(gray, out3, mode='rgb')
+    # image2 = visualor(images, boxes, labels, 'images/fg.jpeg')
+    # out4 = model.default_predictor(image2)
+    # img4 = model.visual_instance_predictions(image2, out4, mode='rgb')
+    # plt.imshow(img2)
+    # plt.show()
+    # plt.imshow(img)
+    # plt.show()
+    # plt.imshow(img3)
+    # plt.show()
+    # plt.imshow(img4)
+    # plt.show()
+    image = PatchDelaunay2D()
+    print()
+    image.visual()

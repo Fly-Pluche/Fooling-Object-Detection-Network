@@ -36,7 +36,7 @@ class ListDataset(Dataset):
             self.img_list = self.parser.load_images_txt(txt)
         else:
             self.img_list = self.parser.load_images_txt(txt)[:number]
-        self.max_lab = 17
+        self.max_lab = 21
 
     def __getitem__(self, id):
         image_path = self.img_list[id]
