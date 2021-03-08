@@ -97,15 +97,32 @@ class ParseTools:
         y_max = box[1] + box[3] / 2
         return (x_min, y_min, x_max, y_max)
 
-    def xyxy2xywh(self, box):
-        return None
+    # if your box's type is float you can use is_float.
+    # size: [width,height]
+    def xyxy2xywh(self, size, box, is_float=False):
+        x = (box[0] + box[2]) / 2
+        y = (box[1] + box[3]) / 2
+        w = box[2] - box[0]
+        h = box[3] - box[1]
+        if not is_float:
+            x /= size[0]
+            w /= size[0]
+            y /= size[1]
+            h /= size[1]
+        return (x, y, w, h)
+
+    # turn many boxes to the xywh format
+    def xyxy2xywhs(self, size, boxes, is_float=False):
+        boxes = list(boxes)
+        boxes = [self.xyxy2xywh(size, box) for box in boxes]
+        return boxes
 
     # load images txt:  there are absolute path
-    def load_images_txt(self, txt_file):
+    def load_file_txt(self, txt_file):
         with open(txt_file, 'r') as f:
-            images = f.readlines()
-            images = [item.replace('\n', '') for item in images]
-        return images
+            content = f.readlines()
+            content = [item.replace('\n', '') for item in content]
+        return content
 
     def parse_anno_file(self, anno_path, image_type='jpg', mode='numpy',
                         need_classes=None):
@@ -147,9 +164,8 @@ class ParseTools:
             anno = json.loads(f.read())
         image_name = anno_path.split('.')[-2].split('/')[-1] + '.' + image_type
         image_path = "/".join(anno_path.split('/')[:-2]) + '/image/' + image_name
-        # image = self.__read_image(image_path, mode=mode)
-        image = None
-        segmentation = []
+        image, image_size = self.__read_image(image_path, mode=mode)  # image: [w,h,3] image_size: [w,h]
+        # image = None
         bounding_boxes = []
         category_id = []
         style = []
@@ -162,22 +178,63 @@ class ParseTools:
             if item[:4] == 'item':
                 if (need_classes is None) or (int(anno[item]['category_id']) in need_classes):
                     # This line code may cause lose some parts of clothes but we only need the class of T-shirt.
-                    segmentation.append(anno[item]['segmentation'][0])
-                    bounding_boxes.append(anno[item]['bounding_box'])
+                    bounding_boxes.append(self.xyxy2xywh(image_size, anno[item]['bounding_box']))  # box: [x,y,w,h]
                     category_id.append(anno[item]['category_id'])
                     style.append(anno[item]['style'])
-                    landmarks.append(anno[item]['landmarks'])
+                    # [x,y,v,x,y,v.....] ==> [[x,y,v],[x,y,v],.....]
+                    landmark = anno[item]['landmarks']
+                    landmark = np.array(landmark)
+                    landmark = landmark[np.newaxis, :]
+                    landmark = landmark.reshape((-1, 3))
+                    landmarks.append(landmark)
                     scale.append(anno[item]['scale'])
                     occlusion.append(anno[item]['occlusion'])
                     zoom_in.append(anno[item]['zoom_in'])
                     viewpoint.append(anno[item]['viewpoint'])
-        anno_info = {'image': image, 'image_name': image_name, 'segmentations': segmentation,
+        anno_info = {'image': image, 'image_size': image_size, 'image_name': image_name,
                      'bounding_boxes': bounding_boxes,
                      'category_ids': category_id, 'styles': style, 'landmarks': landmarks, 'scales': scale,
                      'occlusions': occlusion, 'zoom_ins': zoom_in, 'viewpoints': viewpoint}
         return anno_info
 
+    # make landmarks to the type of polygon
+    def landmarks2polygons(self, landmarks):
+        polygons = []
+        for landmark in landmarks:
+
+            landmark = landmark[landmark[:, 2] != 0][:, 0:2]
+            polygons.append(landmark)
+        return polygons
+
+    def polygon2mask(self, img_size, polygon):
+        # [w,h] ==> [h,w]
+        img_size = list(img_size)
+        img_size.reverse()
+        mask = np.zeros(img_size, dtype=np.uint8)
+        cv2.fillPoly(mask, [polygon], color=1)
+        # [h,w,3] ==> [w,h,3]
+        mask = np.asarray(Image.fromarray(mask))
+        return mask
+
+    def polygons2masks(self, img_size, polygons):
+        masks = []
+        for polygon in polygons:
+            masks.append(self.polygon2mask(img_size, polygon))
+        return masks
+
 
 if __name__ == '__main__':
     tools = ParseTools()
-    tools.parse_anno_file('/home/ray/data/deepfashion2/validation/annos/014685.json')
+    a = tools.parse_anno_file('/home/ray/data/deepfashion2/validation/annos/020273.json', need_classes=[1])
+    # print(a)
+    polygons = a['polygons']
+    mask = tools.polygon2mask(a['image_size'], polygons[0])
+    print(Image.fromarray(mask).size)
+    c = np.array(Image.fromarray(mask))
+    print(c.shape)
+    import matplotlib.pyplot as plt
+
+    plt.imshow(a['image'])
+    plt.show()
+    plt.imshow(c * a['image'])
+    plt.show()
