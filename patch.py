@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.nn.functional as F
+import torchvision
 from PIL import Image
 from torch import nn
 from torch.nn.modules.utils import _pair, _quadruple
@@ -332,7 +333,6 @@ class PatchDelaunay2D:
             self.dt.addPoint(s)
 
         dt_tris = np.array(self.dt.exportTriangles())
-        print(dt_tris)
         return seeds, dt_tris
 
     def visual(self):
@@ -370,142 +370,12 @@ class PatchDelaunay2D:
             f.write(obj)
 
 
-class Computer:
-    def __init__(self):
-        self.batch_size = 2
-
-    @staticmethod
-    def findNeighbour(edge, faces):
-        # find the four neighbouring vertices of the edge
-        neighbours = [np.nan, np.nan]
-        count = 0
-        for i, face in enumerate(faces):
-            if np.any(face == edge[0]):
-                if np.any(face == edge[1]):
-                    neighbourI = np.where(face[np.where(face != edge[0])] != edge[1])
-                    neighbourI = neighbourI[0][0]
-                    n = face[np.where(face != edge[0])]
-                    neighbours[count] = int(n[neighbourI])
-                    count += 1
-        lI, rI = neighbours
-        return lI, rI
-
-    def computeG(self, vertices, edges, faces):
-        # G = np.zeros((np.size(edges,0), 8,4))
-        gCalc = np.zeros((np.size(edges, 0), 2, 8))
-        GI = np.zeros((np.size(edges, 0), 4))
-        for k, edge in enumerate(edges):
-            iI = int(edge[0])
-            jI = int(edge[1])
-            i = vertices[iI - 1, :]
-            j = vertices[jI - 1, :]
-            lI, rI = self.findNeighbour(edge, faces)
-            l = vertices[lI - 1, :]
-            if not np.isnan(rI):
-                r = vertices[rI - 1, :]
-
-            if np.isnan(rI):
-                g = np.array([[i[0], i[1], 1, 0],
-                              [i[1], -i[0], 0, 1],
-                              [j[0], j[1], 1, 0],
-                              [j[1], -j[0], 0, 1],
-                              [l[0], l[1], 1, 0],
-                              [l[1], -l[0], 0, 1]])
-                # G[k,:,:] = g
-                GI[k, :] = [iI, jI, lI, np.nan]
-                gTemp = np.linalg.lstsq(g.T @ g, g.T, rcond=None)[0]
-                gCalc[k, :, 0:6] = gTemp[0:2, :]
-
-            else:
-                g = np.array([[i[0], i[1], 1, 0],
-                              [i[1], -i[0], 0, 1],
-                              [j[0], j[1], 1, 0],
-                              [j[1], -j[0], 0, 1],
-                              [l[0], l[1], 1, 0],
-                              [l[1], -l[0], 0, 1],
-                              [r[0], r[1], 1, 0],
-                              [r[1], -r[0], 0, 1]])
-                # G[k,:,:]
-                GI[k, :] = [iI, jI, lI, rI]
-                gTemp = np.linalg.lstsq(g.T @ g, g.T, rcond=None)[0]
-                gCalc[k, :, :] = gTemp[0:2, :]
-        return GI, gCalc
-
-    def computeH(self, edges, gCalc, GI, vertices):
-        H = np.zeros((np.size(edges, 0) * 2, 8))
-        for k, edge in enumerate(edges):
-
-            ek = vertices[int(edge[1]) - 1, :] - vertices[int(edge[0]) - 1, :]
-            EK = [[ek[0], ek[1]], [ek[1], -ek[0]]]
-
-            if np.isnan(GI[k, 3]):
-                oz = [[-1, 0, 1, 0, 0, 0],
-                      [0, -1, 0, 1, 0, 0]]
-                g = gCalc[k, :, 0:6]
-                # gCalc = np.linalg.lstsq(g.T@g,g.T, rcond=None)[0]
-                hCalc = oz - (EK @ g)
-                H[k * 2, 0:6] = hCalc[0, :]
-                H[k * 2 + 1, 0:6] = hCalc[1, :]
-            else:
-                oz = [[-1, 0, 1, 0, 0, 0, 0, 0],
-                      [0, -1, 0, 1, 0, 0, 0, 0]]
-                g = gCalc[k, :, :]
-                # gCalc = np.linalg.lstsq(g.T@g,g.T, rcond=None)[0]
-                hCalc = oz - (EK @ g)
-                H[k * 2, :] = hCalc[0, :]
-                H[k * 2 + 1, :] = hCalc[1, :]
-        return H
-
-    def computeVPrime(self, edges, vertices, GI, H, C, locations):
-        A = np.zeros((np.size(edges, 0) * 2 + np.size(C) * 2, np.size(vertices, 0) * 2))
-        b = np.zeros((np.size(edges, 0) * 2 + np.size(C) * 2, 1))
-
-        w = 1000
-
-        vPrime = np.zeros((np.size(vertices, 0), 2))
-
-        for gIndex, g in enumerate(GI):
-            for vIndex, v in enumerate(g):
-                if not np.isnan(v):
-                    v = int(v) - 1
-                    A[gIndex * 2, v * 2] = H[gIndex * 2, vIndex * 2]
-                    A[gIndex * 2 + 1, v * 2] = H[gIndex * 2 + 1, vIndex * 2]
-                    A[gIndex * 2, v * 2 + 1] = H[gIndex * 2, vIndex * 2 + 1]
-                    A[gIndex * 2 + 1, v * 2 + 1] = H[gIndex * 2 + 1, vIndex * 2 + 1]
-
-        for cIndex, c in enumerate(C):
-            A[np.size(edges, 0) * 2 + cIndex * 2, c * 2] = w
-            A[np.size(edges, 0) * 2 + cIndex * 2 + 1, c * 2 + 1] = w
-            b[np.size(edges, 0) * 2 + cIndex * 2] = w * locations[cIndex, 0]
-            b[np.size(edges, 0) * 2 + cIndex * 2 + 1] = w * locations[cIndex, 1]
-
-        V = np.linalg.lstsq(A.T @ A, A.T @ b, rcond=None)[0]
-
-        vPrime[:, 0] = V[0::2, 0]
-        vPrime[:, 1] = V[1::2, 0]
-
-        return vPrime, A, b
-
-    def computeVPrimeFast(self, edges, vertices, C, locations, A, b):
-        w = 1000
-
-        vPrime = np.zeros((np.size(vertices, 0), 2))
-
-        V = np.linalg.lstsq(A.T @ A, A.T @ b, rcond=None)[0]
-
-        vPrime[:, 0] = V[0::2, 0]
-        vPrime[:, 1] = V[1::2, 0]
-
-        return vPrime
-
-
 class PatchARAPTransformer(nn.Module):
     def __init__(self):
         """
         use ARAP to transformer the image
         """
         super(PatchARAPTransformer, self).__init__()
-        self.computer = Computer()
         self.patch_config = patch_configs['base']()
         self.patch_delaunay2d = PatchDelaunay2D()
         self.needed_points = [11, 12, 13, 14, 15, 16, 17, 18, 19]
@@ -518,97 +388,114 @@ class PatchARAPTransformer(nn.Module):
         return array
 
     def forward(self, adv_patch, boxes_batch, segmentations_batch, points_batch):
-        batch_size = boxes_batch.size()[0]
+        batch_size = torch.Size((boxes_batch.size(0), boxes_batch.size(1)))
         boxes_number = boxes_batch.size()[1]
 
-        # transform adv patch one the boxes' positions
-        # load base Delaunay coordinates
-        seeds_basic = np.copy(self.patch_delaunay2d.seeds)
-        tris = np.copy(self.patch_delaunay2d.dt_tris)
-
         # pad the adv_patch and make it have the size size with image
-        # [3,w,h] ==> [1,3,w,h]
-        adv_patch = adv_patch.unsqueeze(0)
+        # make a batch of adversarial patch
+        adv_patch = adv_patch.unsqueeze(0)  # [3,w,h] ==> [1,3,w,h]
+        adv_patch = adv_patch.unsqueeze(0)  # [1,3,w,h] ==> [1,1,3,w,h]
+        adv_batch = adv_patch.expand(boxes_batch.size(0), boxes_number, -1, -1,
+                                     -1)  # [1,1,3,w,h] ==> [batch size,boxes num,3,w,h]
 
-        # adv_patch = adv_patch.expand(boxes_number, -1, -1, -1)
-        # [1,3,w,h] ==> [1,3,w,h]
-        adv_patch = adv_patch.unsqueeze(0)
-        # [1,1,3,w,h] ==> [batch size,boxes num,3,w,h]
-        adv_batch = adv_patch.expand(batch_size, boxes_number, -1, -1, -1)
         img_size = np.array(self.patch_config.img_size_big)
         pad = list((img_size - adv_patch.size(-1)) / 2)
         my_pad = nn.ConstantPad2d((int(pad[0] + 0.5), int(pad[0]), int(pad[1] + 0.5), int(pad[1])), 0)
         adv_batch = my_pad(adv_batch)
+        current_patch_size = adv_patch.size(-1)
 
-        # pad seeds and make its value between 0 and 1
-        seeds_basic[:, 0] = seeds_basic[:, 0] + int(pad[0] + 0.5)
-        seeds_basic[:, 1] = seeds_basic[:, 1] + int(pad[1] + 0.5)
-        seeds_basic[:, 0] /= self.patch_config.img_size_big[0]
-        seeds_basic[:, 1] /= self.patch_config.img_size_big[1]
-
-        # according box to calculate the basic size of the delaunay coordinates
+        # according box to calculate the basic size of the adv patches
         # find needed points:  [12,13,14,15,16,17,18,19,20]
-        useful_points = np.copy(points_batch) * self.patch_config.img_size_big[0]  # [batch, 2, 25, 3]
+        useful_points = points_batch.clone() * self.patch_config.img_size_big[0]  # [batch, 2, 25, 3]
         useful_points = useful_points[:, :, self.needed_points, :]
         xy_center = (useful_points[:, :, 1, :] + useful_points[:, :, 2, :] +
                      useful_points[:, :, 6, :] + useful_points[:, :, 7, :]) / 4
-        x_center = xy_center[:, :, 0]  # [4,2]
-        y_center = xy_center[:, :, 1]  # [4,2]
-        x_center = self.numpy_expand(x_center)  # [4,2,seeds_num,2]
-        y_center = self.numpy_expand(y_center)  # [4,2,seeds_num,2]
+        target_x = xy_center[:, :, 0].view(np.prod(batch_size))  # [4,2] -> [8]
+        target_y = xy_center[:, :, 1].view(np.prod(batch_size))  # [4,2] -> [8]
+
+        # calculate each box's width
         w1 = (useful_points[:, :, 7, 0] + useful_points[:, :, 6, 0]) / 2 - (
                 useful_points[:, :, 2, 0] + useful_points[:, :, 1, 0]) / 2
         w2 = (useful_points[:, :, 3, 1] - useful_points[:, :, 2, 1]) / 2.7 + useful_points[:, :, 2, 1] \
              - useful_points[:, :, 1, 1] + (useful_points[:, :, 1, 1] - useful_points[:, :, 0, 1]) / 2.7
-        # w: [batch, boxes number] int
-        w = np.min((w1, w2), axis=0)
-        w = self.numpy_expand(w)
+        # calculate size
+        target_size = torch.stack([w1, w2], dim=2)
+        target_size = torch.min(target_size, dim=2).values  # [batch, boxes number] in
 
-        # change delaunay coordinates
-        # seeds for each box
-        seeds_batch = np.copy(self.patch_delaunay2d.seeds)  # [seeds_num, 2]
-        seeds_batch = torch.from_numpy(seeds_batch)
-        seeds_batch = seeds_batch.unsqueeze(0)  # [1,seeds_num,2]
-        seeds_batch = seeds_batch.unsqueeze(0)  # [1,1,seeds_num,2]
-        # [batch,boxes_number,seeds_num,2]
-        seeds_batch = seeds_batch.expand((batch_size, boxes_number, -1, -1)).numpy()
-        seeds_batch = seeds_batch / self.patch_config.patch_size
-        seeds_batch = seeds_batch * w
-
-        # move to the center point of the box
-        x_pad = x_center - w / 2
-        y_pad = y_center - w / 2
-        seeds_batch[:, :, :, 0] = seeds_batch[:, :, :, 0] - w[:, :, :, 0] / 2
-        seeds_batch[:, :, :, 1] = seeds_batch[:, :, :, 1] - w[:, :, :, 0] / 2
-
-        # rotate the seeds batch
-        #  y15-y13   y17-y19     1
+        # rotation patches to the right patch
+        #  x15-x13   x17-x19     1
         # (——————— + ———————) * ———
-        #  x15-x13   x17-x19     2
-        left_angels = np.arctan((useful_points[:, :, 3, 1] - useful_points[:, :, 1, 1]) / (
-                useful_points[:, :, 3, 0] - useful_points[:, :, 1, 0]))
-        right_angels = np.arctan((useful_points[:, :, 5, 1] - useful_points[:, :, 7, 1]) / (
-                useful_points[:, :, 5, 0] - useful_points[:, :, 7, 0]))
+        #  y15-y13   y17-y19     2
+        left_angels = torch.arctan((useful_points[:, :, 3, 0] - useful_points[:, :, 1, 0]) / (
+                useful_points[:, :, 3, 1] - useful_points[:, :, 1, 1]))
+        right_angels = torch.arctan((useful_points[:, :, 5, 0] - useful_points[:, :, 7, 0]) / (
+                useful_points[:, :, 5, 1] - useful_points[:, :, 7, 1]))
         angels = (left_angels + right_angels) / 2
-        angels = self.numpy_expand(angels)
-        rotated_seeds_batch = np.copy(seeds_batch)
-
-        # x1=cos(angle)*x-sin(angle)*y
-        rotated_seeds_batch[:, :, :, 0] = \
-            np.cos(angels[:, :, :, 0]) * seeds_batch[:, :, :, 0] - np.sin(angels[:, :, :, 0]) * seeds_batch[:, :, :, 1]
-        # y1=cos(angle)*y+sin(angle)*x
-        rotated_seeds_batch[:, :, :, 1] = \
-            np.cos(angels[:, :, :, 0]) * seeds_batch[:, :, :, 1] + np.sin(angels[:, :, :, 0]) * seeds_batch[:, :, :, 0]
-        rotated_seeds_batch[:, :, :, 1] = rotated_seeds_batch[:, :, :, 1] + y_pad[:, :, :, 0] + w[:, :, :, 0] / 2
-        rotated_seeds_batch[:, :, :, 0] = rotated_seeds_batch[:, :, :, 0] + x_pad[:, :, :, 0] + w[:, :, :, 0] / 2
-        self.seeds_batch = rotated_seeds_batch
-
-        # load tensor on the gpu
-        rotated_seeds_batch = torch.tensor(rotated_seeds_batch).cuda()  # triangles' coordinates after transforming
-        tris = torch.tensor(tris).cuda()
-        seeds_basic = torch.tensor(seeds_basic).cuda()  # triangles' coordinates before transforming
+        angle_size = (labels_batch.size(0) * labels_batch.size(1))
+        angels = angels.view(angle_size)  # [4,2] ==> [8]
+        angels[torch.isnan(angels)] = 0
 
 
+        sclae = target_size / current_patch_size
+        sclae = sclae.view(angle_size)
+
+        s = adv_batch.size()
+        adv_batch = adv_batch.view(s[0] * s[1], s[2], s[3], s[4])
+
+        tx = (-target_x / self.patch_config.img_size_big[0] + 0.5) * 2
+        ty = (-target_y / self.patch_config.img_size_big[0] + 0.5) * 2
+
+        sin = torch.sin(angels)
+        cos = torch.cos(angels)
+
+        # theta = rotation,rescale,matrix
+        theta = torch.cuda.FloatTensor(angle_size, 2, 3).fill_(0)
+        theta[:, 0, 0] = cos / sclae
+        theta[:, 0, 1] = sin / sclae
+        theta[:, 0, 2] = tx * cos / sclae + ty * sin / sclae
+        theta[:, 1, 0] = -sin / sclae
+        theta[:, 1, 1] = cos / sclae
+        theta[:, 1, 2] = -tx * sin / sclae + ty * cos / sclae
+
+        grid = F.affine_grid(theta, adv_batch.shape)
+        adv_batch_t = F.grid_sample(adv_batch, grid, align_corners=True)
+        adv_batch_t = adv_batch_t.view(s[0], s[1], s[2], s[3], s[4])
+
+        # make shadow masks for each adv_batch_t
+
+        # # change delaunay coordinates
+        # # seeds for each box
+        # seeds_batch = np.copy(self.patch_delaunay2d.seeds)  # [seeds_num, 2]
+        # seeds_batch = torch.from_numpy(seeds_batch)
+        # seeds_batch = seeds_batch.unsqueeze(0)  # [1,seeds_num,2]
+        # seeds_batch = seeds_batch.unsqueeze(0)  # [1,1,seeds_num,2]
+        # # [batch,boxes_number,seeds_num,2]
+        # seeds_batch = seeds_batch.expand((batch_size, boxes_number, -1, -1)).numpy()
+        # seeds_batch = seeds_batch / self.patch_config.patch_size
+        # seeds_batch = seeds_batch * w
+        #
+        # # move to the center point of the box
+        # x_pad = target_x - w / 2
+        # y_pad = target_y - w / 2
+        # seeds_batch[:, :, :, 0] = seeds_batch[:, :, :, 0] - w[:, :, :, 0] / 2
+        # seeds_batch[:, :, :, 1] = seeds_batch[:, :, :, 1] - w[:, :, :, 0] / 2
+
+        # rotated_seeds_batch = np.copy(seeds_batch)
+        #
+        # # x1=cos(angle)*x-sin(angle)*y
+        # rotated_seeds_batch[:, :, :, 0] = \
+        #     np.cos(angels[:, :, :, 0]) * seeds_batch[:, :, :, 0] - np.sin(angels[:, :, :, 0]) * seeds_batch[:, :, :, 1]
+        # # y1=cos(angle)*y+sin(angle)*x
+        # rotated_seeds_batch[:, :, :, 1] = \
+        #     np.cos(angels[:, :, :, 0]) * seeds_batch[:, :, :, 1] + np.sin(angels[:, :, :, 0]) * seeds_batch[:, :, :, 0]
+        # rotated_seeds_batch[:, :, :, 1] = rotated_seeds_batch[:, :, :, 1] + y_pad[:, :, :, 0] + w[:, :, :, 0] / 2
+        # rotated_seeds_batch[:, :, :, 0] = rotated_seeds_batch[:, :, :, 0] + x_pad[:, :, :, 0] + w[:, :, :, 0] / 2
+        # self.seeds_batch = rotated_seeds_batch
+        #
+        # # load tensor on the gpu
+        # rotated_seeds_batch = torch.tensor(rotated_seeds_batch).cuda()  # triangles' coordinates after transforming
+        # tris = torch.tensor(tris).cuda()
+        # seeds_basic = torch.tensor(seeds_basic).cuda()  # triangles' coordinates before transforming
 
         # TODO: affine transformation: move the image to the right place (move each small triangles)
 
@@ -662,40 +549,45 @@ if __name__ == '__main__':
     adv = functional.pil_to_tensor(image)
     images_batch, boxes_batch, labels_batch, landmarks_batch = next(iter(loader))
     AA = PatchARAPTransformer()
+    adv = adv.cuda()
+    adv = adv / 255.
+    boxes_batch = boxes_batch.cuda()
+    landmarks_batch = landmarks_batch.cuda()
     AA(adv, boxes_batch, 1, landmarks_batch)
     images_batch = images_batch[image_id]
     a = np.array(functional.to_pil_image(images_batch))
     fig, ax = plt.subplots(1)
     ax.imshow(a)
-    import matplotlib.patches as patches
-
-    landmarks_batch = landmarks_batch * config.img_size_big[0]
-    boxes_batch = boxes_batch * config.img_size_big[0]
-    boxes_batch = boxes_batch[image_id][0]
-    # boxes_batch[0] = boxes_batch[0] - boxes_batch[2]/2
-    # boxes_batch[1] = boxes_batch[1] - boxes_batch[3]/2
-    # boxes_batch[2] = boxes_batch[2]/2 + boxes_batch[0]
-    # boxes_batch[3] = boxes_batch[3]/2 + boxes_batch[1]
-    rect = patches.Rectangle(xy=(boxes_batch[0] - boxes_batch[2] / 2, boxes_batch[1] - boxes_batch[3] / 2),
-                             width=boxes_batch[2],
-                             height=boxes_batch[3], linewidth=2, fill=False, edgecolor='r')
-    ax.add_patch(rect)
-    # rect = patches.Rectangle(xy=(325 - 162 / 2, 293 - 162 / 2),
-    #                          width=162,
-    #                          height=162, linewidth=2, fill=False, edgecolor='r')
-    useful_points = landmarks_batch[:, :, AA.needed_points, :][image_id][0]
-    x = useful_points[:, 0].numpy()
-    y = useful_points[:, 1].numpy()
-    print('x:', x)
-    print('y:', y)
-    plt.plot(x, y, 'o')
-    ax.add_patch(rect)
-    points = AA.seeds_batch
-    points = points[image_id][0]
-    cx = points[:, 0]
-    cy = points[:, 1]
-    # print(cx)
-    ax.triplot(matplotlib.tri.Triangulation(cx, cy, AA.patch_delaunay2d.dt_tris), 'bo--', markersize=0.5)
-    ax.axes.xaxis.set_visible(False)
-    ax.axes.yaxis.set_visible(False)
     plt.show()
+    # import matplotlib.patches as patches
+    #
+    # landmarks_batch = landmarks_batch * config.img_size_big[0]
+    # boxes_batch = boxes_batch * config.img_size_big[0]
+    # boxes_batch = boxes_batch[image_id][0]
+    # # boxes_batch[0] = boxes_batch[0] - boxes_batch[2]/2
+    # # boxes_batch[1] = boxes_batch[1] - boxes_batch[3]/2
+    # # boxes_batch[2] = boxes_batch[2]/2 + boxes_batch[0]
+    # # boxes_batch[3] = boxes_batch[3]/2 + boxes_batch[1]
+    # rect = patches.Rectangle(xy=(boxes_batch[0] - boxes_batch[2] / 2, boxes_batch[1] - boxes_batch[3] / 2),
+    #                          width=boxes_batch[2],
+    #                          height=boxes_batch[3], linewidth=2, fill=False, edgecolor='r')
+    # ax.add_patch(rect)
+    # # rect = patches.Rectangle(xy=(325 - 162 / 2, 293 - 162 / 2),
+    # #                          width=162,
+    # #                          height=162, linewidth=2, fill=False, edgecolor='r')
+    # useful_points = landmarks_batch[:, :, AA.needed_points, :][image_id][0]
+    # x = useful_points[:, 0].numpy()
+    # y = useful_points[:, 1].numpy()
+    # print('x:', x)
+    # print('y:', y)
+    # plt.plot(x, y, 'o')
+    # ax.add_patch(rect)
+    # points = AA.seeds_batch
+    # points = points[image_id][0]
+    # cx = points[:, 0]
+    # cy = points[:, 1]
+    # # print(cx)
+    # ax.triplot(matplotlib.tri.Triangulation(cx, cy, AA.patch_delaunay2d.dt_tris), 'bo--', markersize=0.5)
+    # ax.axes.xaxis.set_visible(False)
+    # ax.axes.yaxis.set_visible(False)
+    # plt.show()
