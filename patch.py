@@ -1,5 +1,6 @@
 from __future__ import absolute_import
 
+import cv2
 import math
 
 import matplotlib
@@ -16,6 +17,7 @@ from torchvision.transforms import functional
 from load_data import ListDatasetAnn
 from patch_config import patch_configs
 from utils.delaunay2D import Delaunay2D
+from utils.parse_annotations import ParseTools
 
 
 # import os
@@ -198,7 +200,7 @@ class PatchApplier(nn.Module):
         advs = torch.unbind(adv_batch, 1)
         # adv_batch [4, 15, 3, 416, 416]
         for adv in advs:
-            img_batch = torch.where((adv > 0.000001), adv, img_batch)
+            img_batch = torch.where((adv > 0.00000000000000000001), adv, img_batch)
         return img_batch
 
 
@@ -408,8 +410,8 @@ class PatchARAPTransformer(nn.Module):
         # find needed points:  [12,13,14,15,16,17,18,19,20]
         useful_points = points_batch.clone() * self.patch_config.img_size_big[0]  # [batch, 2, 25, 3]
         useful_points = useful_points[:, :, self.needed_points, :]
-        xy_center = (useful_points[:, :, 1, :] + useful_points[:, :, 2, :] +
-                     useful_points[:, :, 6, :] + useful_points[:, :, 7, :]) / 4
+        xy_center = (useful_points[:, :, 1, :] + useful_points[:, :, 3, :] +
+                     useful_points[:, :, 5, :] + useful_points[:, :, 7, :]) / 4
         target_x = xy_center[:, :, 0].view(np.prod(batch_size))  # [4,2] -> [8]
         target_y = xy_center[:, :, 1].view(np.prod(batch_size))  # [4,2] -> [8]
 
@@ -435,9 +437,8 @@ class PatchARAPTransformer(nn.Module):
         angels = angels.view(angle_size)  # [4,2] ==> [8]
         angels[torch.isnan(angels)] = 0
 
-
-        sclae = target_size / current_patch_size
-        sclae = sclae.view(angle_size)
+        scale = target_size / current_patch_size
+        scale = scale.view(angle_size)
 
         s = adv_batch.size()
         adv_batch = adv_batch.view(s[0] * s[1], s[2], s[3], s[4])
@@ -445,63 +446,60 @@ class PatchARAPTransformer(nn.Module):
         tx = (-target_x / self.patch_config.img_size_big[0] + 0.5) * 2
         ty = (-target_y / self.patch_config.img_size_big[0] + 0.5) * 2
 
-        sin = torch.sin(angels)
-        cos = torch.cos(angels)
+        sin = torch.sin(-angels)
+        cos = torch.cos(-angels)
 
         # theta = rotation,rescale,matrix
         theta = torch.cuda.FloatTensor(angle_size, 2, 3).fill_(0)
-        theta[:, 0, 0] = cos / sclae
-        theta[:, 0, 1] = sin / sclae
-        theta[:, 0, 2] = tx * cos / sclae + ty * sin / sclae
-        theta[:, 1, 0] = -sin / sclae
-        theta[:, 1, 1] = cos / sclae
-        theta[:, 1, 2] = -tx * sin / sclae + ty * cos / sclae
+        theta[:, 0, 0] = cos / scale
+        theta[:, 0, 1] = sin / scale
+        theta[:, 0, 2] = tx * cos / scale + ty * sin / scale
+        theta[:, 1, 0] = -sin / scale
+        theta[:, 1, 1] = cos / scale
+        theta[:, 1, 2] = -tx * sin / scale + ty * cos / scale
 
         grid = F.affine_grid(theta, adv_batch.shape)
         adv_batch_t = F.grid_sample(adv_batch, grid, align_corners=True)
         adv_batch_t = adv_batch_t.view(s[0], s[1], s[2], s[3], s[4])
 
-        # make shadow masks for each adv_batch_t
+        # according clothes' masks to get the shadow information on the clothes
+        max_channel = torch.sum(segmentations_batch, dim=(3, 4))  # [batch size, boxes num,3]
+        max_channel = torch.argmax(max_channel, dim=2)  # [batch size, boxes num]
+        max_channel = max_channel.unsqueeze(-1)
+        max_channel = max_channel.unsqueeze(-1)
+        max_channel = max_channel.unsqueeze(-1)
+        # [batch size ,boxes num,1,1,1] ==> [batch size ,boxes num,3,img size,img size]
+        max_channel = max_channel.expand(
+            (-1, -1, 1, self.patch_config.img_size_big[0], self.patch_config.img_size_big[1]))
+        segmentations_batch = torch.gather(segmentations_batch, 2, max_channel)
+        # [batch size,boes number,img size, img size]
+        segmentations_batch = segmentations_batch.expand((-1, -1, 3, -1, -1))
+        adv_batch_t = adv_batch_t * segmentations_batch
 
-        # # change delaunay coordinates
-        # # seeds for each box
-        # seeds_batch = np.copy(self.patch_delaunay2d.seeds)  # [seeds_num, 2]
-        # seeds_batch = torch.from_numpy(seeds_batch)
-        # seeds_batch = seeds_batch.unsqueeze(0)  # [1,seeds_num,2]
-        # seeds_batch = seeds_batch.unsqueeze(0)  # [1,1,seeds_num,2]
-        # # [batch,boxes_number,seeds_num,2]
-        # seeds_batch = seeds_batch.expand((batch_size, boxes_number, -1, -1)).numpy()
-        # seeds_batch = seeds_batch / self.patch_config.patch_size
-        # seeds_batch = seeds_batch * w
-        #
-        # # move to the center point of the box
-        # x_pad = target_x - w / 2
-        # y_pad = target_y - w / 2
-        # seeds_batch[:, :, :, 0] = seeds_batch[:, :, :, 0] - w[:, :, :, 0] / 2
-        # seeds_batch[:, :, :, 1] = seeds_batch[:, :, :, 1] - w[:, :, :, 0] / 2
 
-        # rotated_seeds_batch = np.copy(seeds_batch)
-        #
-        # # x1=cos(angle)*x-sin(angle)*y
-        # rotated_seeds_batch[:, :, :, 0] = \
-        #     np.cos(angels[:, :, :, 0]) * seeds_batch[:, :, :, 0] - np.sin(angels[:, :, :, 0]) * seeds_batch[:, :, :, 1]
-        # # y1=cos(angle)*y+sin(angle)*x
-        # rotated_seeds_batch[:, :, :, 1] = \
-        #     np.cos(angels[:, :, :, 0]) * seeds_batch[:, :, :, 1] + np.sin(angels[:, :, :, 0]) * seeds_batch[:, :, :, 0]
-        # rotated_seeds_batch[:, :, :, 1] = rotated_seeds_batch[:, :, :, 1] + y_pad[:, :, :, 0] + w[:, :, :, 0] / 2
-        # rotated_seeds_batch[:, :, :, 0] = rotated_seeds_batch[:, :, :, 0] + x_pad[:, :, :, 0] + w[:, :, :, 0] / 2
-        # self.seeds_batch = rotated_seeds_batch
-        #
-        # # load tensor on the gpu
-        # rotated_seeds_batch = torch.tensor(rotated_seeds_batch).cuda()  # triangles' coordinates after transforming
-        # tris = torch.tensor(tris).cuda()
-        # seeds_basic = torch.tensor(seeds_basic).cuda()  # triangles' coordinates before transforming
 
-        # TODO: affine transformation: move the image to the right place (move each small triangles)
+        return adv_batch_t
 
-        # TODO: get clothe shadow according the segmentations of the clothe
-        # TODO: apply shadow on the adv_patch
-        pass
+
+class GaussianBlurConv(nn.Module):
+    def __init__(self, channels=3):
+        super(GaussianBlurConv, self).__init__()
+        self.channels = channels
+        # print("channels: ", channels.shape)
+        kernel = torch.FloatTensor([[0.00078633, 0.00655965, 0.01330373, 0.00655965, 0.00078633],
+                               [0.00655965, 0.05472157, 0.11098164, 0.05472157, 0.00655965],
+                               [0.01330373, 0.11098164, 0.22508352, 0.11098164, 0.01330373],
+                               [0.00655965, 0.05472157, 0.11098164, 0.05472157, 0.00655965],
+                               [0.00078633, 0.00655965, 0.01330373, 0.00655965, 0.00078633]])
+        # (H, W) -> (1, 1, H, W)
+        kernel = kernel.unsqueeze(0)
+        kernel = kernel.unsqueeze(0)
+        kernel = kernel.expand((int(channels), 1, 5, 5))
+        self.weight = nn.Parameter(data=kernel, requires_grad=False)
+
+    def forward(self, x):
+        x = F.conv2d(x, self.weight, padding=2, groups=self.channels)
+        return x
 
 
 if __name__ == '__main__':
@@ -536,28 +534,67 @@ if __name__ == '__main__':
     # image.visual()
     # image.write_to_obj('./box.obj')
     # print(image.dt_tris)
-    image_id = 2
+    image_id = 3
     config = patch_configs['base']()
-    da = ListDatasetAnn(config.deepfashion_txt, 10)
+    da = ListDatasetAnn(config.deepfashion_txt, 30)
     loader = torch.utils.data.DataLoader(
         da,
         batch_size=config.batch_size,
         num_workers=8,
         shuffle=True,
     )
-    image = Image.open('/home/corona/attack/Fooling-Object-Detection-Network/patches/fg_patch.png')
+    image = Image.open('/home/corona/attack/Fooling-Object-Detection-Network/patches/rem.png')
     adv = functional.pil_to_tensor(image)
-    images_batch, boxes_batch, labels_batch, landmarks_batch = next(iter(loader))
-    AA = PatchARAPTransformer()
+    images_batch, boxes_batch, labels_batch, landmarks_batch, _ = next(iter(loader))
+    images_batch, boxes_batch, labels_batch, landmarks_batch, _ = next(iter(loader))
+    images_batch, boxes_batch, labels_batch, landmarks_batch, _ = next(iter(loader))
+    # print(_)
+    AA = PatchARAPTransformer().cuda()
+    BB = PatchApplier().cuda()
     adv = adv.cuda()
-    adv = adv / 255.
+    adv = adv / 255
+    adv = adv.float()
+    tools = ParseTools()
+    _ = _.float()
+    # polygons = tools.landmarks2polygons(labels_batch)
+    # masks = tools.polygons2masks((600, 600), polygons)
+    # print(masks.shape)
     boxes_batch = boxes_batch.cuda()
     landmarks_batch = landmarks_batch.cuda()
-    AA(adv, boxes_batch, 1, landmarks_batch)
+    adv = AA(adv, boxes_batch, _.cuda(), landmarks_batch)
+    images_batch = BB(images_batch.cuda(), adv)
+    images_batch = images_batch.float().cpu()
     images_batch = images_batch[image_id]
+    seg = _[image_id][0]
+    print(seg.size())
+    print(torch.sum(seg, dim=(1, 2)))
     a = np.array(functional.to_pil_image(images_batch))
     fig, ax = plt.subplots(1)
     ax.imshow(a)
+    plt.show()
+    a = np.array(functional.to_pil_image(images_batch[0]))
+    fig, ax = plt.subplots(1)
+    ax.imshow(a)
+    plt.show()
+    a = np.array(functional.to_pil_image(images_batch[1]))
+    fig, ax = plt.subplots(1)
+    ax.imshow(a)
+    plt.show()
+    a = np.array(functional.to_pil_image(images_batch[2]))
+    fig, ax = plt.subplots(1)
+    ax.imshow(a)
+    plt.show()
+    mask = _[image_id][0]
+    mask[:, :, :] = torch.mean(mask, dim=0)
+    plt.imshow(np.array(functional.to_pil_image(mask)))
+    plt.show()
+    mean_ = torch.mean(mask[mask != 0])
+    mask[mask != 0] = 0.3 * (mask[mask != 0] - mean_) + mean_
+    # print(mask)
+    mask = torch.clamp(mask, 0, 1)
+    # print(mask.size())
+    mask = np.array(functional.to_pil_image(mask))
+    plt.imshow(mask)
     plt.show()
     # import matplotlib.patches as patches
     #

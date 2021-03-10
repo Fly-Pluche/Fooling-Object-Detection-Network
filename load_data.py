@@ -104,15 +104,42 @@ class ListDatasetAnn(ListDataset):
         boxes = image_info['bounding_boxes']  # [x,y,x,y] uint8
         labels = image_info['category_ids']
         landmarks = image_info['landmarks']
-        landmarks = np.array(landmarks,dtype=np.float)
+        landmarks = np.array(landmarks, dtype=np.float)
         landmarks[:, :, 0] = landmarks[:, :, 0] / image_size[0]
         landmarks[:, :, 1] = landmarks[:, :, 1] / image_size[1]
         image, boxes, landmarks = self.pad_and_scale_(image, boxes, landmarks)
         boxes, labels = self.pad_lab_and_boxes(boxes, labels)
         landmarks = self.pad_landmarks(landmarks)
-        image = functional.pil_to_tensor(image)
+        image = functional.pil_to_tensor(image) / 255.
         # image: [3,w,h] boxes: [max_pad, 4] (x,y,w,h) labels: [max_pad] landmarks: [max_landmarks,25,3]
-        return image, boxes, labels, landmarks
+        segmentations = self.landmarks2masks(landmarks)
+        segmentations = torch.from_numpy(segmentations)
+        # get clothes' mask
+        segmentations = segmentations.unsqueeze(1)
+        segmentations = segmentations.expand(-1, 3, -1, -1)
+        segmentations = segmentations * image
+        return image, boxes, labels, landmarks, segmentations
+
+    def landmarks2masks(self, landmarks):
+        """
+        a batch of landmarks to a batch of masks
+        Args:
+            landmarks: [batch size, max_landmarks, 3]
+        """
+        masks_batch = []
+        landmarks_scaled = np.copy(landmarks)
+        landmarks_scaled = landmarks_scaled * self.configs.img_size_big[0]
+        polygons_batch = landmarks_scaled[:, :, 0: 2]  # [batch size, max_landmarks, )]
+        bg_mask = np.zeros(self.configs.img_size_big, dtype=np.uint8)
+        for polygons in polygons_batch:
+            polygons = np.array(polygons, np.int32)
+            if np.sum(polygons) != 0:
+                masks = cv2.fillPoly(bg_mask, [polygons], color=1)
+                masks_batch.append(np.asarray(Image.fromarray(masks)))
+            else:
+                masks_batch.append(bg_mask)
+        masks_batch = np.array(masks_batch, np.float)
+        return masks_batch
 
     def pad_and_scale_(self, image, boxes, landmarks):
         h = image.shape[0]

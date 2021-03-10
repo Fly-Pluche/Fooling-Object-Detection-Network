@@ -201,7 +201,6 @@ class ParseTools:
     def landmarks2polygons(self, landmarks):
         polygons = []
         for landmark in landmarks:
-
             landmark = landmark[landmark[:, 2] != 0][:, 0:2]
             polygons.append(landmark)
         return polygons
@@ -219,7 +218,8 @@ class ParseTools:
     def polygons2masks(self, img_size, polygons):
         masks = []
         for polygon in polygons:
-            masks.append(self.polygon2mask(img_size, polygon))
+            if np.sum(polygon) != 0:
+                masks.append(self.polygon2mask(img_size, polygon))
         return masks
 
 
