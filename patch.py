@@ -13,7 +13,7 @@ from PIL import Image
 from torch import nn
 from torch.nn.modules.utils import _pair, _quadruple
 from torchvision.transforms import functional
-
+from torchvision.transforms import GaussianBlur
 from load_data import ListDatasetAnn
 from patch_config import patch_configs
 from utils.delaunay2D import Delaunay2D
@@ -382,6 +382,7 @@ class PatchARAPTransformer(nn.Module):
         self.patch_config = patch_configs['base']()
         self.patch_delaunay2d = PatchDelaunay2D()
         self.needed_points = [11, 12, 13, 14, 15, 16, 17, 18, 19]
+        self.gaussian_blur = GaussianBlur(7, 4)
 
     def numpy_expand(self, array):
         array = torch.from_numpy(array)
@@ -401,12 +402,12 @@ class PatchARAPTransformer(nn.Module):
         adv_batch = adv_patch.expand(boxes_batch.size(0), boxes_number, -1, -1,
                                      -1)  # [1,1,3,w,h] ==> [batch size,boxes num,3,w,h]
         # create adv patches' masks
-        adv_mask_batch = torch.ones_like(adv_batch).cuda()
+        adv_mask_batch_t = torch.ones_like(adv_batch).cuda()
         img_size = torch.tensor(self.patch_config.img_size_big)
         pad = list((img_size - adv_patch.size(-1)) / 2)
         my_pad = nn.ConstantPad2d((int(pad[0] + 0.5), int(pad[0]), int(pad[1] + 0.5), int(pad[1])), 0)
         adv_batch = my_pad(adv_batch)
-        adv_mask_batch = my_pad(adv_mask_batch)
+        adv_mask_batch_t = my_pad(adv_mask_batch_t)
         current_patch_size = adv_patch.size(-1)
 
         # according box to calculate the basic size of the adv patches
@@ -445,7 +446,7 @@ class PatchARAPTransformer(nn.Module):
 
         s = adv_batch.size()
         adv_batch = adv_batch.view(s[0] * s[1], s[2], s[3], s[4])
-        adv_mask_batch = adv_mask_batch.view(s[0] * s[1], s[2], s[3], s[4])
+        adv_mask_batch_t = adv_mask_batch_t.view(s[0] * s[1], s[2], s[3], s[4])
 
         tx = (-target_x / self.patch_config.img_size_big[0] + 0.5) * 2
         ty = (-target_y / self.patch_config.img_size_big[0] + 0.5) * 2
@@ -461,18 +462,31 @@ class PatchARAPTransformer(nn.Module):
         theta[:, 1, 0] = -sin / scale
         theta[:, 1, 1] = cos / scale
         theta[:, 1, 2] = -tx * sin / scale + ty * cos / scale
+        theta[torch.isnan(theta)] = 0
+        theta[torch.isinf(theta)] = 0
         grid = F.affine_grid(theta, adv_batch.shape)
         adv_batch_t = F.grid_sample(adv_batch, grid, align_corners=True)
         adv_batch_t = adv_batch_t.view(s[0], s[1], s[2], s[3], s[4])
-        adv_mask_batch = F.grid_sample(adv_mask_batch, grid, align_corners=True)
-        adv_mask_batch = adv_mask_batch.view(s[0], s[1], s[2], s[3], s[4])
-        adv_mask_batch = adv_mask_batch[:, :, 0, :, :]  # [batch size, boxes number,-1,-1]
+        adv_mask_batch_t = F.grid_sample(adv_mask_batch_t, grid, align_corners=True)
+        adv_mask_batch_t = adv_mask_batch_t.view(s[0], s[1], s[2], s[3], s[4])
+        adv_mask_batch = adv_mask_batch_t.clone()
+        adv_mask_batch = adv_mask_batch[:, :, 0, :, :]
+
+        # turn rgb images to gray images
+        images_batch_gray = images_batch.clone()
+        images_batch_max = torch.max(images_batch_gray, dim=-3).values
+        images_batch_min = torch.min(images_batch_gray, dim=-3).values
+        images_batch_gray = (images_batch_max + images_batch_min) / 2
+        images_batch_gray = images_batch_gray.unsqueeze(1)
+        images_batch_gray = images_batch_gray.expand(-1, s[2], -1, -1)
+        # add gaussian blur
+        images_batch_gray = self.gaussian_blur(images_batch_gray)
+        images_batch_gray = images_batch_gray.unsqueeze(1)
+        images_batch_gray = images_batch_gray.expand(-1, s[1], -1, -1, -1)
 
         # adjust the position of patches
-        images_batch = images_batch.unsqueeze(1)
-        images_batch = images_batch.expand(-1, s[1], -1, -1, -1)
-        red_channel = images_batch[:, :, 0, :, :]  # [batch size, boxes number, img size, img size]
-        green_channel = images_batch[:, :, 1, :, :]  # [batch size, boxes number, img size, img size]
+        red_channel = images_batch_gray[:, :, 0, :, :]  # [batch size, boxes number, img size, img size]
+        green_channel = images_batch_gray[:, :, 1, :, :]  # [batch size, boxes number, img size, img size]
         x_offset = torch.arange(0, self.patch_config.img_size_big[0], dtype=torch.float)
         x_offset = torch.cuda.FloatTensor(x_offset.cuda())
         x_offset = x_offset.unsqueeze(0)
@@ -491,36 +505,21 @@ class PatchARAPTransformer(nn.Module):
         grid2 = grid2.view(s[0] * s[1], s[3], s[4], 2)
         # normalize ix, iy from [0, IH-1] & [0, IW-1] to [-1,1]
         grid2 = grid2 * 2 / (self.patch_config.img_size_big[0] - 1) - 1
-        # print(grid2)
         adv_batch_t = adv_batch_t.view(s[0] * s[1], s[2], s[3], s[4])
+        adv_mask_batch_t = adv_mask_batch_t.view(s[0] * s[1], s[2], s[3], s[4])
         adv_batch_t = F.grid_sample(adv_batch_t, grid2, align_corners=True)
+        adv_mask_batch_t = F.grid_sample(adv_mask_batch_t, grid2, align_corners=True)
         adv_batch_t = adv_batch_t.view(s)
-        plt.imshow(np.array(functional.to_pil_image(adv_batch_t[0][0])))
-        plt.show()
-        # adv_batch_t = adv_batch_t * segmentations_batch
+        adv_mask_batch_t = adv_mask_batch_t.view(s)
+        # Linear Burn
+        adv_batch_t[adv_mask_batch_t != 0] = adv_batch_t[adv_mask_batch_t != 0] + images_batch_gray[
+            adv_mask_batch_t != 0] - 1
+        adv_batch_t = torch.clamp(adv_batch_t, 0, 1)
+        adv_batch_t[segmentations_batch == 0] = 0
 
         return adv_batch_t
 
 
-class GaussianBlurConv(nn.Module):
-    def __init__(self, channels=3):
-        super(GaussianBlurConv, self).__init__()
-        self.channels = channels
-        # print("channels: ", channels.shape)
-        kernel = torch.FloatTensor([[0.00078633, 0.00655965, 0.01330373, 0.00655965, 0.00078633],
-                                    [0.00655965, 0.05472157, 0.11098164, 0.05472157, 0.00655965],
-                                    [0.01330373, 0.11098164, 0.22508352, 0.11098164, 0.01330373],
-                                    [0.00655965, 0.05472157, 0.11098164, 0.05472157, 0.00655965],
-                                    [0.00078633, 0.00655965, 0.01330373, 0.00655965, 0.00078633]])
-        # (H, W) -> (1, 1, H, W)
-        kernel = kernel.unsqueeze(0)
-        kernel = kernel.unsqueeze(0)
-        kernel = kernel.expand((int(channels), 1, 5, 5))
-        self.weight = nn.Parameter(data=kernel, requires_grad=False)
-
-    def forward(self, x):
-        x = F.conv2d(x, self.weight, padding=2, groups=self.channels)
-        return x
 
 
 if __name__ == '__main__':
@@ -568,7 +567,7 @@ if __name__ == '__main__':
     adv = functional.pil_to_tensor(image)
     img_batch, boxes_batch, labels_batch, landmarks_batch, _ = next(iter(loader))
     img_batch, boxes_batch, labels_batch, landmarks_batch, _ = next(iter(loader))
-    img_batch, boxes_batch, labels_batch, landmarks_batch, _ = next(iter(loader))
+    # img_batch, boxes_batch, labels_batch, landmarks_batch, _ = next(iter(loader))
     # print(_)
     AA = PatchARAPTransformer().cuda()
     BB = PatchApplier().cuda()
