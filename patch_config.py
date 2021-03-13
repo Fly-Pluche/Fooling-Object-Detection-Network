@@ -16,10 +16,11 @@ class BaseConfig(object):
         self.weight_file = "/home/corona/attack/PyTorch-YOLOv3/good_weights/yolov3_ckpt_98.pth"
         self.txt_path = '/home/corona/datasets/WiderPerson/train/train2.txt'
         self.save_adv_patch_path = '/home/corona/attack/Fooling-Object-Detection-Network/patches'
-        self.deepfashion_txt = '/home/ray/data/deepfashion2/validation/train.txt'
-        self.patch_size = 400
-
-        self.start_learning_rate = 0.005
+        self.deepfashion_txt = '/home/ray/data/deepfashion2/train/train.txt'
+        # self.deepfashion_txt = '/home/ray/data/deepfashion2/train/train.txt'
+        self.patch_size = 500
+        self.root_path = '/home/ray/data/deepfashion2/train'
+        self.start_learning_rate = 0.001
 
         self.patch_name = 'base'
 
@@ -29,8 +30,8 @@ class BaseConfig(object):
 
         self.loss_target = lambda obj, cls: obj * cls
         # width height
-        self.img_size = (416, 416)
-        self.img_size_big = (600, 600)
+        self.img_size = (1000, 1000)
+        self.img_size_big = (1000, 1000)
         # the number of gauss function
         self.gauss_num = 20
 

@@ -41,7 +41,8 @@ class ListDataset(Dataset):
 
     def __getitem__(self, id):
         image_path = self.file_list[id]
-        image_info = self.parser.load_image(image_path, mode='numpy')  # load a rgb type image
+        image_info = self.parser.load_image(image_path, mode='numpy',
+                                            root=self.configs.root_path)  # load a rgb type image
         # boxes: [x,y,w,h]
         image, boxes = self.pad_and_scale(image_info['image'], image_info['boxes'])
         boxes, labels = self.pad_lab_and_boxes(boxes, image_info['labels'])
@@ -90,15 +91,17 @@ class ListDataset(Dataset):
 
 
 class ListDatasetAnn(ListDataset):
-    def __init__(self, txt, number=None):
+    def __init__(self, txt, number=None, name=False):
         super(ListDatasetAnn, self).__init__(txt, number)
         self.needed_classes = [1]
         self.max_lab = 2
         self.max_landmarks = 2
+        self.name = name
 
     def __getitem__(self, id):
         anno_path = self.file_list[id]
-        image_info = self.parser.parse_anno_file(anno_path=anno_path, need_classes=self.needed_classes)
+        image_info = self.parser.parse_anno_file(anno_path=anno_path, need_classes=self.needed_classes,
+                                                 root=self.configs.root_path)
         image = image_info['image']
         image_size = image_info['image_size']
         boxes = image_info['bounding_boxes']  # [x,y,x,y] uint8
@@ -118,6 +121,8 @@ class ListDatasetAnn(ListDataset):
         segmentations = segmentations.unsqueeze(1)
         segmentations = segmentations.expand(-1, 3, -1, -1)
         segmentations = segmentations * image
+        if self.name:
+            return image, boxes, labels, landmarks, segmentations, image_info['image_name']
         return image, boxes, labels, landmarks, segmentations
 
     def landmarks2masks(self, landmarks):

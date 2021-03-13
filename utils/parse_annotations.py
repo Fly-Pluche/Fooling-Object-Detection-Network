@@ -43,16 +43,17 @@ class ParseTools:
 
     # load image information
     def load_image(self, image_path, mode='numpy'
-                   , is_xywh2xyxy=False, is_xyxy2xywh=False, is_xyxy2xywh_keep=False) -> dict:
+                   , is_xywh2xyxy=False, is_xyxy2xywh=False, is_xyxy2xywh_keep=False, root=None) -> dict:
         """
         :param image_path: the path of the image
         :param mode: you can choose use opencv or PIL to read the image
         :param is_xywh2xyxy: box mode xywh ==> xyxy
         :param is_xyxy2xywh: box mode xyxy ==> xywh
         :param is_xyxy2xywh_keep: box mode xyxy ==> xywh (between 0 and 1)
+        :param root: the root path of your datasets. If your paths in the txt file are absolutly path you don't need this.
         :return:
         """
-        image, image_size = self.__read_image(image_path, mode)
+        image, image_size = self.__read_image(image_path, mode, root)
 
         image_name = image_path.split('/')[-1]
         ann_path = os.path.join("/".join(image_path.split('/')[:-2]), 'labels', image_name.split('.')[0] + '.txt')
@@ -61,7 +62,10 @@ class ParseTools:
                                                 is_xyxy2xywh_keep)
         return {'image': image, 'image_name': image_name, 'image_size': image_size, 'boxes': boxes, 'labels': labels}
 
-    def __read_image(self, image_path, mode):
+    def __read_image(self, image_path, mode, root=None):
+        if root is not None:
+            image_path = os.path.join(root, image_path)
+
         if mode == 'cv2':
             image = cv2.imread(image_path)
             # image_size: [width, height]
@@ -125,7 +129,7 @@ class ParseTools:
         return content
 
     def parse_anno_file(self, anno_path, image_type='jpg', mode='numpy',
-                        need_classes=None):
+                        need_classes=None, root=None):
         """
         parse dataset deepfashion's annotation file
         Args:
@@ -160,11 +164,13 @@ class ParseTools:
         zoom_in: a number, where 1 represents no zoom-in, 2 represents medium zoom-in and 3 represents lagre zoom-in.
         viewpoint: a number, where 1 represents no wear, 2 represents frontal viewpoint and 3 represents side or back viewpoint.
         """
+        if root is not None:
+            anno_path = os.path.join(root, 'annos', anno_path)
         with open(anno_path, 'r') as f:
             anno = json.loads(f.read())
         image_name = anno_path.split('.')[-2].split('/')[-1] + '.' + image_type
         image_path = "/".join(anno_path.split('/')[:-2]) + '/image/' + image_name
-        image, image_size = self.__read_image(image_path, mode=mode)  # image: [w,h,3] image_size: [w,h]
+        image, image_size = self.__read_image(image_path, mode=mode, root=root)  # image: [w,h,3] image_size: [w,h]
         # image = None
         bounding_boxes = []
         category_id = []

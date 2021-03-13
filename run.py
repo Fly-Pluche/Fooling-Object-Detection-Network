@@ -1,6 +1,6 @@
 from __future__ import absolute_import
 
-from train_patch_rgb import *
+from train_patch_promote import *
 
 if __name__ == '__main__':
     if __package__ is None:

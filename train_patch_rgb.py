@@ -46,7 +46,7 @@ class PatchTrainer(object):
         optimizer a adversarial patch
         """
         # load train datasets
-        datasets = ListDataset(self.config.txt_path, 3000)
+        datasets = ListDataset(self.config.txt_path)
         train_data = DataLoader(
             datasets,
             batch_size=self.config.batch_size,

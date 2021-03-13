@@ -21,7 +21,7 @@ from utils.parse_annotations import ParseTools
 
 import os
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+# os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
 
 class MedianPool2d(nn.Module):
@@ -226,7 +226,7 @@ class PatchApplierPro(nn.Module):
         masks = torch.unbind(adv_mask_batch, 1)
         # adv_batch [4, 15, 3, 416, 416]
         for adv, mask in zip(advs, masks):
-            img_batch = torch.where((adv > 0.0000001), adv, img_batch)
+            img_batch = torch.where((mask > 0.1), adv, img_batch)
         # plt.imshow(np.array(functional.to_pil_image(img_batch[0])))
         # plt.show()
         return img_batch
@@ -448,14 +448,14 @@ class PatchTransformerPro(nn.Module):
         target_y = xy_center[:, :, 1].view(np.prod(batch_size))  # [4,2] -> [8]
 
         # calculate each box's width
-        w1 = (useful_points[:, :, 7, 0] + useful_points[:, :, 6, 0]) / 1.8 - (
-                useful_points[:, :, 2, 0] + useful_points[:, :, 1, 0]) / 1.8
-        w2 = (useful_points[:, :, 3, 1] - useful_points[:, :, 2, 1]) / 2.2 + useful_points[:, :, 2, 1] \
-             - useful_points[:, :, 1, 1] + (useful_points[:, :, 1, 1] - useful_points[:, :, 0, 1]) / 2.2
+        w1 = 0.9 * (useful_points[:, :, 7, 0] + useful_points[:, :, 5, 0]) / 2 - 0.9 * (
+                useful_points[:, :, 2, 0] + useful_points[:, :, 3, 0]) / 2
+        w2 = - 0.9 * (useful_points[:, :, 7, 1] + useful_points[:, :, 5, 1]) / 2 + 0.9 * (
+                useful_points[:, :, 2, 1] + useful_points[:, :, 3, 1]) / 2
         # calculate size
-        target_size = torch.stack([w1, w2], dim=2)
-        target_size = torch.min(target_size, dim=2).values  # [batch, boxes number] in
-
+        # target_size = torch.stack([w1, w2], dim=2)
+        # target_size = torch.max(target_size, dim=2).values  # [batch, boxes number] in
+        target_size = torch.add(w1, w2) / 2.
         # rotation patches to the right patch
         #  x15-x13   x17-x19     1
         # (——————— + ———————) * ———
@@ -542,14 +542,19 @@ class PatchTransformerPro(nn.Module):
         adv_mask_batch_t = adv_mask_batch_t.view(s)
         # cut the image out of the clothes
         adv_batch_t = torch.clamp(adv_batch_t, 0, 1)
-        adv_batch_t[segmentations_batch == 0] = 0
-
+        color_sum = images_batch_gray.clone()
+        color_sum = color_sum * adv_mask_batch_t
+        color_sum = color_sum.view(s[0], s[1], s[-1] * s[-2] * s[-3])
+        color_sum = torch.sum(color_sum, dim=2)
+        mask = adv_mask_batch_t.clone()
+        mask[color_sum <= 65000] += 1
         # Linear Burn
-        adv_batch_t[adv_mask_batch_t != 0] = adv_batch_t[adv_mask_batch_t != 0] + images_batch_gray[
-            adv_mask_batch_t != 0] - 1
+        adv_batch_t[mask == 1] = adv_batch_t[mask == 1] + images_batch_gray[
+            mask == 1] - 1
 
         useful_points = torch.sum(useful_points, dim=[2, 3])
         adv_batch_t[useful_points == 0] = 0
+        adv_mask_batch_t[useful_points == 0] = 0
         return adv_batch_t, adv_mask_batch_t
 
 

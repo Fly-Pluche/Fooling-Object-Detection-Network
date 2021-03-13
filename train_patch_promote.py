@@ -65,7 +65,7 @@ class PatchTrainer(object):
         optimizer = torch.optim.Adam([adv_patch_cpu], lr=self.config.start_learning_rate)
         scheduler = self.config.scheduler_factory(optimizer)  # used to update learning rate
 
-        for epoch in range(100):
+        for epoch in range(10000):
             ep_det_loss = 0
             ep_tv_loss = 0
             ep_loss = 0
@@ -85,13 +85,12 @@ class PatchTrainer(object):
                                                                        image_batch)
                 p_img_batch = self.patch_applier(image_batch, adv_batch_t, adv_batch_mask_t)
                 p_img_batch = F.interpolate(p_img_batch, (self.config.img_size[1], self.config.img_size[0]))
-                plt.imshow(np.array(functional.to_pil_image(p_img_batch[0][0])))
+
+                plt.imshow(np.array(functional.to_pil_image(p_img_batch[1])))
                 plt.show()
-                break
+
                 max_prob = self.max_prob_extractor(self.model_, p_img_batch)
-
                 tv = self.total_variation(adv_patch)
-
                 tv_loss = tv * 2.5
                 det_loss = torch.mean(max_prob)
                 det_loss = 1 - det_loss
