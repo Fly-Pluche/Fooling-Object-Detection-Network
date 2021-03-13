@@ -205,6 +205,33 @@ class PatchApplier(nn.Module):
         return img_batch
 
 
+class PatchApplierPro(nn.Module):
+    """PatchApplier: applies adversarial patches to images.
+
+    Module providing the functionality necessary to apply a patch to all detections in all images in the batch.
+
+    """
+
+    def __init__(self):
+        super(PatchApplierPro, self).__init__()
+
+    def forward(self, img_batch, adv_batch, adv_mask_batch):
+        # plt.imshow(np.array(functional.to_pil_image(adv_batch[0][1])))
+        # plt.show()
+        # plt.imshow(np.array(functional.to_pil_image(adv_mask_batch[0][0])))
+        # plt.show()
+        # plt.imshow(np.array(functional.to_pil_image(img_batch[0])))
+        # plt.show()
+        advs = torch.unbind(adv_batch, 1)
+        masks = torch.unbind(adv_mask_batch, 1)
+        # adv_batch [4, 15, 3, 416, 416]
+        for adv, mask in zip(advs, masks):
+            img_batch = torch.where((adv > 0.0000001), adv, img_batch)
+        # plt.imshow(np.array(functional.to_pil_image(img_batch[0])))
+        # plt.show()
+        return img_batch
+
+
 class PatchVisualor(nn.Module):
     """
     visual batch applying on the origin image
@@ -373,16 +400,16 @@ class PatchDelaunay2D:
             f.write(obj)
 
 
-class PatchARAPTransformer(nn.Module):
+class PatchTransformerPro(nn.Module):
     def __init__(self):
         """
         use ARAP to transformer the image
         """
-        super(PatchARAPTransformer, self).__init__()
+        super(PatchTransformerPro, self).__init__()
         self.patch_config = patch_configs['base']()
         self.patch_delaunay2d = PatchDelaunay2D()
         self.needed_points = [11, 12, 13, 14, 15, 16, 17, 18, 19]
-        self.gaussian_blur = GaussianBlur(7, 4)
+        self.gaussian_blur = GaussianBlur(5, 3)
 
     def numpy_expand(self, array):
         array = torch.from_numpy(array)
@@ -401,6 +428,7 @@ class PatchARAPTransformer(nn.Module):
         adv_patch = adv_patch.unsqueeze(0)  # [1,3,w,h] ==> [1,1,3,w,h]
         adv_batch = adv_patch.expand(boxes_batch.size(0), boxes_number, -1, -1,
                                      -1)  # [1,1,3,w,h] ==> [batch size,boxes num,3,w,h]
+
         # create adv patches' masks
         adv_mask_batch_t = torch.ones_like(adv_batch).cuda()
         img_size = torch.tensor(self.patch_config.img_size_big)
@@ -420,10 +448,10 @@ class PatchARAPTransformer(nn.Module):
         target_y = xy_center[:, :, 1].view(np.prod(batch_size))  # [4,2] -> [8]
 
         # calculate each box's width
-        w1 = (useful_points[:, :, 7, 0] + useful_points[:, :, 6, 0]) / 2 - (
-                useful_points[:, :, 2, 0] + useful_points[:, :, 1, 0]) / 2
-        w2 = (useful_points[:, :, 3, 1] - useful_points[:, :, 2, 1]) / 2.7 + useful_points[:, :, 2, 1] \
-             - useful_points[:, :, 1, 1] + (useful_points[:, :, 1, 1] - useful_points[:, :, 0, 1]) / 2.7
+        w1 = (useful_points[:, :, 7, 0] + useful_points[:, :, 6, 0]) / 1.8 - (
+                useful_points[:, :, 2, 0] + useful_points[:, :, 1, 0]) / 1.8
+        w2 = (useful_points[:, :, 3, 1] - useful_points[:, :, 2, 1]) / 2.2 + useful_points[:, :, 2, 1] \
+             - useful_points[:, :, 1, 1] + (useful_points[:, :, 1, 1] - useful_points[:, :, 0, 1]) / 2.2
         # calculate size
         target_size = torch.stack([w1, w2], dim=2)
         target_size = torch.min(target_size, dim=2).values  # [batch, boxes number] in
@@ -437,7 +465,7 @@ class PatchARAPTransformer(nn.Module):
         right_angels = torch.arctan((useful_points[:, :, 5, 0] - useful_points[:, :, 7, 0]) / (
                 useful_points[:, :, 5, 1] - useful_points[:, :, 7, 1]))
         angels = (left_angels + right_angels) / 2
-        angle_size = (labels_batch.size(0) * labels_batch.size(1))
+        angle_size = (segmentations_batch.size(0) * segmentations_batch.size(1))
         angels = angels.view(angle_size)  # [4,2] ==> [8]
         angels[torch.isnan(angels)] = 0
 
@@ -483,7 +511,8 @@ class PatchARAPTransformer(nn.Module):
         images_batch_gray = self.gaussian_blur(images_batch_gray)
         images_batch_gray = images_batch_gray.unsqueeze(1)
         images_batch_gray = images_batch_gray.expand(-1, s[1], -1, -1, -1)
-
+        # adjust contrast
+        images_batch_gray = functional.adjust_contrast(images_batch_gray, 3)
         # adjust the position of patches
         red_channel = images_batch_gray[:, :, 0, :, :]  # [batch size, boxes number, img size, img size]
         green_channel = images_batch_gray[:, :, 1, :, :]  # [batch size, boxes number, img size, img size]
@@ -511,15 +540,17 @@ class PatchARAPTransformer(nn.Module):
         adv_mask_batch_t = F.grid_sample(adv_mask_batch_t, grid2, align_corners=True)
         adv_batch_t = adv_batch_t.view(s)
         adv_mask_batch_t = adv_mask_batch_t.view(s)
-        # Linear Burn
-        adv_batch_t[adv_mask_batch_t != 0] = adv_batch_t[adv_mask_batch_t != 0] + images_batch_gray[
-            adv_mask_batch_t != 0] - 1
+        # cut the image out of the clothes
         adv_batch_t = torch.clamp(adv_batch_t, 0, 1)
         adv_batch_t[segmentations_batch == 0] = 0
 
-        return adv_batch_t
+        # Linear Burn
+        adv_batch_t[adv_mask_batch_t != 0] = adv_batch_t[adv_mask_batch_t != 0] + images_batch_gray[
+            adv_mask_batch_t != 0] - 1
 
-
+        useful_points = torch.sum(useful_points, dim=[2, 3])
+        adv_batch_t[useful_points == 0] = 0
+        return adv_batch_t, adv_mask_batch_t
 
 
 if __name__ == '__main__':
@@ -569,7 +600,7 @@ if __name__ == '__main__':
     img_batch, boxes_batch, labels_batch, landmarks_batch, _ = next(iter(loader))
     # img_batch, boxes_batch, labels_batch, landmarks_batch, _ = next(iter(loader))
     # print(_)
-    AA = PatchARAPTransformer().cuda()
+    AA = PatchTransformerPro().cuda()
     BB = PatchApplier().cuda()
     adv = adv.cuda()
     adv = adv / 255
