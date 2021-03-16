@@ -8,6 +8,12 @@ from detectron2.data import MetadataCatalog
 
 class Visualizer_(Visualizer):
     def __init__(self, img, model, threshold=0.5, mode='tensor'):
+        """
+        Args:
+            img: one image (support tensor and rgb np array)
+            model: detectron2 model
+            threshold: boxes which confidence score low than threshold will not be drawn
+        """
         if mode == 'tensor':
             img_rgb = self.tensor2rgb(img)
         else:
@@ -36,6 +42,8 @@ class Visualizer_(Visualizer):
                 "pred_boxes", "pred_classes", "scores", "pred_masks" (or "pred_masks_rle").
         Returns:
             output (VisImage): image object with visualizations.
+
+        corona: rewrite this function in detectron2. This function will only draw boxes on the image
         """
         boxes = predictions.pred_boxes if predictions.has("pred_boxes") else None
         scores = predictions.scores if predictions.has("scores") else None

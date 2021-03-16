@@ -38,7 +38,7 @@ class PatchTrainer(object):
     def init_tensorboard(self, name=None):
         if name is not None:
             time_str = time.strftime("%Y%m%d-%H%M%S")
-            return SummaryWriter(f'/home/corona/attack/Fooling-Object-Detection-Network/logs/{time_str}_{name}')
+            return SummaryWriter(f'/home/ray/workspace/Keter/logs/{time_str}_{name}')
         else:
             return SummaryWriter()
 
@@ -51,14 +51,14 @@ class PatchTrainer(object):
         train_data = DataLoader(
             datasets,
             batch_size=self.config.batch_size,
-            num_workers=8,
+            num_workers=1,
             shuffle=True,
         )
 
         epoch_length = len(train_data)
         # generate a gray patch
         adv_patch_cpu = self.generate_patch(
-            load_from_file='/home/corona/attack/Fooling-Object-Detection-Network/images/fg.jpeg')
+            load_from_file='/home/corona/attack/Fooling-Object-Detection-Network/patches/patch1.png')
         adv_patch_cpu.requires_grad_(True)
 
         # use adam to update adv_patch
@@ -118,7 +118,7 @@ class PatchTrainer(object):
                     print('\n')
                 else:
                     # del adv_batch_t, output, max_prob, det_loss, p_img_batch, nps_loss, tv_loss, loss
-                    del adv_batch_t, max_prob, det_loss, p_img_batch, tv_loss, loss
+                    del adv_batch_t, max_prob, det_loss, p_img_batch, tv_loss, loss, adv_batch_mask_t
                     torch.cuda.empty_cache()
 
             # save adversarial patch
@@ -139,7 +139,7 @@ class PatchTrainer(object):
             print('  DET LOSS: ', ep_det_loss)
             print('   TV LOSS: ', ep_tv_loss)
             # del adv_batch_t, output, max_prob, det_loss, p_img_batch, nps_loss, tv_loss, loss
-            del adv_batch_t, max_prob, det_loss, p_img_batch, tv_loss, loss
+            del adv_batch_t, max_prob, det_loss, p_img_batch, tv_loss, loss, adv_batch_mask_t
             torch.cuda.empty_cache()
 
     def generate_patch(self, load_from_file=None):

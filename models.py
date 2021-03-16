@@ -14,6 +14,7 @@ from utils.img_tools import ImageTools
 from predict import Predictor
 from utils.visualizer import Visualizer_
 
+
 # import os
 # os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
@@ -43,11 +44,11 @@ class BaseModel(nn.Module):
         """
         return self.default_predictor(img)
 
-    def visual_instance_predictions(self, img, output,mode='tensor'):
+    def visual_instance_predictions(self, img, output, mode='tensor'):
         """
         draw instance boxes on the image
         """
-        v = Visualizer_(img, self,mode=mode)
+        v = Visualizer_(img, self, mode=mode)
         out = v.draw_instance_predictions(output["instances"].to('cpu'))
         return out.get_image()[:, :, ::-1]
 
