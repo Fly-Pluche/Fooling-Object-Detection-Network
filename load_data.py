@@ -93,10 +93,11 @@ class ListDataset(Dataset):
 class ListDatasetAnn(ListDataset):
     def __init__(self, txt, number=None, name=False):
         super(ListDatasetAnn, self).__init__(txt, number)
-        self.needed_classes = [1]
-        self.max_lab = 2
-        self.max_landmarks = 2
+        self.needed_classes = [1]  # the type clothes you want to select
+        self.max_lab = 3
+        self.max_landmarks = 3
         self.name = name
+        self.tools = ParseTools()
 
     def __getitem__(self, id):
         anno_path = self.file_list[id]
@@ -104,14 +105,18 @@ class ListDatasetAnn(ListDataset):
                                                  root=self.configs.root_path)
         image = image_info['image']
         image_size = image_info['image_size']
-        boxes = image_info['bounding_boxes']  # [x,y,x,y] uint8
-        labels = image_info['category_ids']
+        clothes_boxes = image_info['bounding_boxes']  # [x,y,x,y] uint8
+        labels = image_info['people_labels']
         landmarks = image_info['landmarks']
+        people_boxes = image_info['person_boxes']  # [x,y,x,y] uint 8
         landmarks = np.array(landmarks, dtype=np.float)
         landmarks[:, :, 0] = landmarks[:, :, 0] / image_size[0]
         landmarks[:, :, 1] = landmarks[:, :, 1] / image_size[1]
-        image, boxes, landmarks = self.pad_and_scale_(image, boxes, landmarks)
-        boxes, labels = self.pad_lab_and_boxes(boxes, labels)
+        image, clothes_boxes, people_boxes, landmarks = self.pad_and_scale_(image, clothes_boxes, people_boxes,
+                                                                            landmarks)
+        # instead clothes labels with people labels
+
+        clothes_boxes, people_boxes, labels = self.pad_lab_and_boxes_(clothes_boxes, people_boxes, labels)
         landmarks = self.pad_landmarks(landmarks)
         image = functional.pil_to_tensor(image) / 255.
         # image: [3,w,h] boxes: [max_pad, 4] (x,y,w,h) labels: [max_pad] landmarks: [max_landmarks,25,3]
@@ -122,8 +127,23 @@ class ListDatasetAnn(ListDataset):
         segmentations = segmentations.expand(-1, 3, -1, -1)
         segmentations = segmentations * image
         if self.name:
-            return image, boxes, labels, landmarks, segmentations, image_info['image_name']
-        return image, boxes, labels, landmarks, segmentations
+            return image, clothes_boxes, labels, landmarks, segmentations, image_info['image_name']
+        return image, clothes_boxes, people_boxes, labels, landmarks, segmentations
+
+    def pad_lab_and_boxes_(self, clothes_boxes, people_boxes, labels):
+        labels = torch.from_numpy(np.array(labels))
+        clothes_boxes = torch.from_numpy(np.array(clothes_boxes))
+        people_boxes = torch.from_numpy(np.array(people_boxes))
+        clothes_pad_size = self.max_lab - clothes_boxes.size(0)
+        people_pad_size = self.max_lab - people_boxes.size(0)
+        if (people_pad_size > 0):
+            # pad labels and boxes to make it have the save size
+            labels = F.pad(labels, (0, people_pad_size), value=-1)
+            people_boxes = F.pad(people_boxes, (0, 0, 0, people_pad_size), value=0)
+        if (clothes_pad_size > 0):
+            clothes_boxes = F.pad(clothes_boxes, (0, 0, 0, clothes_pad_size), value=0)
+
+        return clothes_boxes, people_boxes, labels
 
     def landmarks2masks(self, landmarks):
         """
@@ -146,12 +166,15 @@ class ListDatasetAnn(ListDataset):
         masks_batch = np.array(masks_batch, np.float)
         return masks_batch
 
-    def pad_and_scale_(self, image, boxes, landmarks):
+    def pad_and_scale_(self, image, clothes_boxes, people_boxes, landmarks):
         h = image.shape[0]
         w = image.shape[1]
         image = Image.fromarray(image)
-        boxes = np.array(boxes)
+        clothes_boxes = np.array(clothes_boxes)
+        people_boxes = np.array(people_boxes)
         landmarks = np.array(landmarks)
+        people_boxes = self.tools.xyxy2xywh_batch((w, h), people_boxes)
+
         if w == h:
             padded_img = image
         else:
@@ -160,22 +183,26 @@ class ListDatasetAnn(ListDataset):
                 padding = (h - w) / 2
                 padded_img = Image.new('RGB', (h, h), color=(127, 127, 127))
                 padded_img.paste(image, (int(padding), 0))
-                # boxes: xywh
-                boxes[:, 0] = (boxes[:, 0] * w + padding) / h
-                boxes[:, 2] = (boxes[:, 2] * w) / h
+                # clothes boxes: xywh, people boxes : xyxy
+                clothes_boxes[:, 0] = (clothes_boxes[:, 0] * w + padding) / h
+                clothes_boxes[:, 2] = (clothes_boxes[:, 2] * w) / h
+                people_boxes[:, 0] = (people_boxes[:, 0] * w + padding) / h
+                people_boxes[:, 2] = (people_boxes[:, 2] * w) / h
                 landmarks[:, :, 0] = ((landmarks[:, :, 0] * w) + padding) / h
 
             else:
                 padding = (w - h) / 2
                 padded_img = Image.new('RGB', (w, w), color=(127, 127, 127))
                 padded_img.paste(image, (0, int(padding)))
-                boxes[:, 1] = (boxes[:, 1] * h + padding) / w
-                boxes[:, 3] = (boxes[:, 3] * h) / w
+                clothes_boxes[:, 1] = (clothes_boxes[:, 1] * h + padding) / w
+                clothes_boxes[:, 3] = (clothes_boxes[:, 3] * h) / w
+                people_boxes[:, 1] = (people_boxes[:, 1] * h + padding) / w
+                people_boxes[:, 3] = (people_boxes[:, 3] * h) / w
                 landmarks[:, :, 1] = (landmarks[:, :, 1] * h + padding) / w
 
         resize = transforms.Resize((self.configs.img_size_big[0], self.configs.img_size_big[1]))
         padded_img = resize(padded_img)
-        return padded_img, boxes, landmarks
+        return padded_img, clothes_boxes, people_boxes, landmarks
 
     def pad_landmarks(self, landmarks):
         """

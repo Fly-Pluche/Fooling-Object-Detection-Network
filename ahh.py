@@ -75,11 +75,38 @@ f.close()
 #     else:
 #         print('...')
 #
-with open(root + '/train.txt', 'r') as f:
-    anns = f.readlines()
-    print(len(anns))
+# with open(root + '/train.txt', 'r') as f:
+#     anns = f.readlines()
+#     print(len(anns))
     # for ann in anns:
     #     with open(ann.strip(), 'r') as f:
     #         a = f.read()
     #         a = json.loads(a)
     #     print(a)
+
+
+
+
+
+
+
+
+
+
+
+
+def str_to_hex(s):
+    return ''.join([hex(ord(c)).replace('0x', '') for c in s])
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -70,16 +70,17 @@ class PatchTrainer(object):
             ep_tv_loss = 0
             ep_loss = 0
             i_batch = 0
-            for image_batch, boxes_batch, labels_batch, landmarks_batch, segmentations_batch in tqdm(train_data):
+            for image_batch, clothes_boxes_batch, _, labels_batch, landmarks_batch, segmentations_batch in tqdm(
+                    train_data):
                 i_batch += 1
                 image_batch = image_batch.cuda()
                 labels_batch = labels_batch.cuda()
-                boxes_batch = boxes_batch.cuda()
+                clothes_boxes_batch = clothes_boxes_batch.cuda()
                 landmarks_batch = landmarks_batch.cuda()
                 segmentations_batch = segmentations_batch.cuda()
                 adv_patch = adv_patch_cpu.cuda()
                 adv_batch_t, adv_batch_mask_t = self.patch_transformer(adv_patch,
-                                                                       boxes_batch,
+                                                                       clothes_boxes_batch,
                                                                        segmentations_batch,
                                                                        landmarks_batch,
                                                                        image_batch)

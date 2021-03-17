@@ -101,8 +101,19 @@ class ParseTools:
         y_max = box[1] + box[3] / 2
         return (x_min, y_min, x_max, y_max)
 
-    # if your box's type is float you can use is_float.
-    # size: [width,height]
+    def xyxy2xywh_batch(self, size, boxes):
+        x = (boxes[:, 0] + boxes[:, 2]) / 2
+        y = (boxes[:, 1] + boxes[:, 3]) / 2
+        w = boxes[:, 2] - boxes[:, 0]
+        h = boxes[:, 3] - boxes[:, 1]
+        # size: [width,height]
+        x = x / size[0]
+        y = y / size[1]
+        w = w / size[0]
+        h = h / size[1]
+        boxes = np.stack([x, y, w, h], axis=1)
+        return boxes
+
     def xyxy2xywh(self, size, box, is_float=False):
         x = (box[0] + box[2]) / 2
         y = (box[1] + box[3]) / 2
@@ -197,10 +208,13 @@ class ParseTools:
                     occlusion.append(anno[item]['occlusion'])
                     zoom_in.append(anno[item]['zoom_in'])
                     viewpoint.append(anno[item]['viewpoint'])
+        person_boxes = np.array(anno['people_boxes'])
+        people_labels = np.zeros(person_boxes.shape[0])
         anno_info = {'image': image, 'image_size': image_size, 'image_name': image_name,
                      'bounding_boxes': bounding_boxes,
                      'category_ids': category_id, 'styles': style, 'landmarks': landmarks, 'scales': scale,
-                     'occlusions': occlusion, 'zoom_ins': zoom_in, 'viewpoints': viewpoint}
+                     'occlusions': occlusion, 'zoom_ins': zoom_in, 'viewpoints': viewpoint,
+                     'person_boxes': person_boxes, 'people_labels': people_labels}
         return anno_info
 
     # make landmarks to the type of polygon
@@ -233,14 +247,14 @@ if __name__ == '__main__':
     tools = ParseTools()
     a = tools.parse_anno_file('/home/ray/data/deepfashion2/validation/annos/020273.json', need_classes=[1])
     # print(a)
-    polygons = a['polygons']
-    mask = tools.polygon2mask(a['image_size'], polygons[0])
-    print(Image.fromarray(mask).size)
-    c = np.array(Image.fromarray(mask))
-    print(c.shape)
-    import matplotlib.pyplot as plt
-
-    plt.imshow(a['image'])
-    plt.show()
-    plt.imshow(c * a['image'])
-    plt.show()
+    # polygons = a['polygons']
+    # mask = tools.polygon2mask(a['image_size'], polygons[0])
+    # print(Image.fromarray(mask).size)
+    # c = np.array(Image.fromarray(mask))
+    # print(c.shape)
+    # import matplotlib.pyplot as plt
+    #
+    # plt.imshow(a['image'])
+    # plt.show()
+    # plt.imshow(c * a['image'])
+    # plt.show()
