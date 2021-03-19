@@ -101,6 +101,19 @@ class ParseTools:
         y_max = box[1] + box[3] / 2
         return (x_min, y_min, x_max, y_max)
 
+    # size: [width, height] batch_boxes: (batch size, boxes number,x, y, w, h) float
+    def xywh2xyxy_batch_torch(self, batch_boxes, size):
+        boxes = batch_boxes.clone()
+        boxes[:, :, 0] = boxes[:, :, 0] * size[0]
+        boxes[:, :, 2] = boxes[:, :, 2] * size[0]
+        boxes[:, :, 1] = boxes[:, :, 1] * size[1]
+        boxes[:, :, 3] = boxes[:, :, 3] * size[1]
+        boxes[:, :, 0] = boxes[:, :, 0] - boxes[:, :, 2] / 2  # x_min = x - w/2
+        boxes[:, :, 1] = boxes[:, :, 1] - boxes[:, :, 3] / 2  # y_min = y - w/2
+        boxes[:, :, 2] = boxes[:, :, 0] + boxes[:, :, 2]  # x_max = x_min + w
+        boxes[:, :, 3] = boxes[:, :, 1] + boxes[:, :, 3]  # y_max = y_max + w
+        return boxes
+
     def xyxy2xywh_batch(self, size, boxes):
         x = (boxes[:, 0] + boxes[:, 2]) / 2
         y = (boxes[:, 1] + boxes[:, 3]) / 2

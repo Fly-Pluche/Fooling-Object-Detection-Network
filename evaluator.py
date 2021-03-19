@@ -13,6 +13,7 @@ from tqdm import tqdm
 from PIL import Image
 from torch.utils.data import DataLoader
 from patch import PatchTransformerPro, PatchApplierPro
+from utils.parse_annotations import ParseTools
 from patch_config import patch_configs
 from load_data import ListDatasetAnn
 from models import RetinaNet, MaskRCNN, FasterRCNN
@@ -30,19 +31,55 @@ class MaxProbExtractor(nn.Module):
 
     def __init__(self):
         super(MaxProbExtractor, self).__init__()
+        self.config = patch_configs['base']()
+        self.tools = ParseTools()
 
-    def forward(self, model, batch_image):
+    def forward(self, model, batch_image, people_boxes):
+        """
+        Args:
+            model: the model used to predict
+            batch_image: a batch of images [batch size, 3, width, height]
+            people_boxes: a batch of boxes [batch size,lab number,4]
+        """
         images = torch.unbind(batch_image, 0)
+        people_boxes = self.tools.xywh2xyxy_batch_torch(people_boxes, self.config.img_size)
         max_prob_t = torch.cuda.FloatTensor(batch_image.size(0)).fill_(0)
+        max_iou_t = torch.cuda.FloatTensor(batch_image.size(0)).fill_(0)
         for i, image in enumerate(images):
             output = model(image)["instances"]
             pred_classes = output.pred_classes
             scores = output.scores
+            boxes = output.pred_boxes.tensor
             people_scores = scores[pred_classes == 0]  # select people predict score
+            boxes = boxes[pred_classes == 0]
+            iou_I_sum = torch.tensor(0., device='cuda')
+            gt_boxes = people_boxes[i]
+            mask_gt_boxes = torch.sum(gt_boxes, dim=-1)
+            gt_boxes = gt_boxes[mask_gt_boxes != 0]
+            for j in range(boxes.size(0)):
+                ixmin = torch.maximum(gt_boxes[:, 0], boxes[j, 0])
+                iymin = torch.maximum(gt_boxes[:, 1], boxes[j, 1])
+                ixmax = torch.minimum(gt_boxes[:, 2], boxes[j, 2])
+                iymax = torch.minimum(gt_boxes[:, 3], boxes[j, 3])
+                iw = torch.maximum(ixmax - ixmin, torch.tensor(0., device='cuda'))
+                ih = torch.maximum(iymax - iymin, torch.tensor(0., device='cuda'))
+                inters = iw * ih
+
+                # union
+                uni = ((boxes[j, 2] - boxes[j, 0]) * (boxes[j, 3] - boxes[j, 1]) +
+                       (gt_boxes[:, 2] - gt_boxes[:, 0]) *
+                       (gt_boxes[:, 3] - gt_boxes[:, 1]) - inters)
+
+                overlaps = inters / uni
+                overlaps = torch.max(overlaps)
+                I = torch.log2(1 / (1 - overlaps))
+                iou_I_sum = iou_I_sum + I
+
             if len(people_scores) != 0:
                 max_prob = torch.max(people_scores)
                 max_prob_t[i] = max_prob
-        return max_prob_t
+                max_iou_t[i] = iou_I_sum
+        return max_prob_t, max_iou_t
 
 
 class TotalVariation(nn.Module):
@@ -221,6 +258,7 @@ class CalculateAP:
                        (BBGT[:, 3] - BBGT[:, 1] + 1.) - inters)
 
                 overlaps = inters / uni
+                overlaps[overlaps > 1] = 0
                 ovmax = np.max(overlaps)
                 jmax = np.argmax(overlaps)
 

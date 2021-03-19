@@ -31,7 +31,7 @@ class BaseConfig(object):
         self.loss_target = lambda obj, cls: obj * cls
         # width height
         self.img_size = (800, 800)
-        self.img_size_big = (800, 800)
+        self.img_size_big = self.img_size
         # the number of gauss function
         self.gauss_num = 20
 

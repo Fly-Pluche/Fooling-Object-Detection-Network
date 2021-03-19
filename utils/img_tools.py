@@ -173,6 +173,8 @@ class ImageTools:
         return patch, mask
 
 
+
+
 def random_choose(txt_path) -> str:
     with open(txt_path, 'r') as f:
         images = f.readlines()

@@ -6,6 +6,7 @@ from detectron2.utils.visualizer import _create_text_labels
 from torchvision.transforms import functional
 from detectron2.data import MetadataCatalog
 
+
 class Visualizer_(Visualizer):
     def __init__(self, img, model, threshold=0.5, mode='tensor'):
         """

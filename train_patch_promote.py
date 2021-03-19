@@ -87,6 +87,7 @@ class PatchTrainer(object):
                 clothes_boxes_batch = clothes_boxes_batch.cuda()
                 landmarks_batch = landmarks_batch.cuda()
                 segmentations_batch = segmentations_batch.cuda()
+                people_boxes_batch = people_boxes_batch.cuda()
                 adv_patch = adv_patch_cpu.cuda()
                 adv_batch_t, adv_batch_mask_t = self.patch_transformer(adv_patch,
                                                                        clothes_boxes_batch,
@@ -98,13 +99,15 @@ class PatchTrainer(object):
                 # show apply affection
                 # plt.imshow(np.array(functional.to_pil_image(p_img_batch[0])))
                 # plt.show()
-                max_prob = self.max_prob_extractor(self.model_, p_img_batch)
+                max_prob, max_iou_t = self.max_prob_extractor(self.model_, p_img_batch, people_boxes_batch)
                 tv = self.total_variation(adv_patch)
-                tv_loss = tv * 2.5
-                det_loss = torch.mean(max_prob)
-                det_loss = 1 - det_loss
-                det_loss = torch.log2(1 / det_loss)
-                loss = det_loss + torch.max(tv_loss, torch.tensor(0.1).cuda())
+                tv_loss = tv
+                # calculate the entropy
+                H_max_prob = (1 - max_prob) * torch.log2(1 / (1 - max_prob))
+                det_loss = 2 * torch.sum(H_max_prob)
+                # calculate iou loss
+                iou_loss = torch.mean(max_iou_t)
+                loss = 2 * det_loss + torch.max(tv_loss, torch.tensor(0.1).cuda()) + 2 * iou_loss
 
                 ep_det_loss += det_loss.detach().cpu().numpy()
                 ep_tv_loss += tv_loss.detach().cpu().numpy()

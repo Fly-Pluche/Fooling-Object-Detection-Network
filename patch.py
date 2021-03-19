@@ -509,12 +509,12 @@ class PatchTransformerPro(nn.Module):
         images_batch_gray = (images_batch_max + images_batch_min) / 2
         images_batch_gray = images_batch_gray.unsqueeze(1)
         images_batch_gray = images_batch_gray.expand(-1, s[2], -1, -1)
+        # adjust contrast
+        images_batch_gray = functional.adjust_contrast(images_batch_gray, 6)
         # add gaussian blur
         images_batch_gray = self.gaussian_blur(images_batch_gray)
         images_batch_gray = images_batch_gray.unsqueeze(1)
         images_batch_gray = images_batch_gray.expand(-1, s[1], -1, -1, -1)
-        # adjust contrast
-        images_batch_gray = functional.adjust_contrast(images_batch_gray, 3)
         # adjust the position of patches
         red_channel = images_batch_gray[:, :, 0, :, :]  # [batch size, boxes number, img size, img size]
         green_channel = images_batch_gray[:, :, 1, :, :]  # [batch size, boxes number, img size, img size]
@@ -544,15 +544,15 @@ class PatchTransformerPro(nn.Module):
         adv_mask_batch_t = adv_mask_batch_t.view(s)
         # cut the image out of the clothes
         adv_batch_t = torch.clamp(adv_batch_t, 0, 1)
-        color_sum = images_batch_gray.clone()
-        color_sum = color_sum * adv_mask_batch_t
-        color_sum = color_sum.view(s[0], s[1], s[-1] * s[-2] * s[-3])
-        color_sum = torch.sum(color_sum, dim=2)
-        mask = adv_mask_batch_t.clone()
-        mask[color_sum <= 65000] += 1
+        # color_sum = images_batch_gray.clone()
+        # color_sum = color_sum * adv_mask_batch_t
+        # color_sum = color_sum.view(s[0], s[1], s[-1] * s[-2] * s[-3])
+        # color_sum = torch.sum(color_sum, dim=2)
+        # mask = adv_mask_batch_t.clone()
+        # mask[color_sum <= 65000] += 1
         # Linear Burn
-        adv_batch_t[mask == 1] = adv_batch_t[mask == 1] + images_batch_gray[
-            mask == 1] - 1
+        # adv_batch_t[mask == 1] = adv_batch_t[mask == 1] + images_batch_gray[
+        #     mask == 1] - 1
 
         useful_points = torch.sum(useful_points, dim=[2, 3])
         adv_batch_t[useful_points == 0] = 0
