@@ -17,6 +17,7 @@ from torchvision.transforms import functional
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import torch.nn.functional as F
+from evaluator import PatchEvaluator
 
 # set random seed
 torch.manual_seed(2233)
@@ -28,12 +29,13 @@ class PatchTrainer(object):
     def __init__(self):
         super(PatchTrainer, self).__init__()
         self.config = patch_configs['base']()  # load base config
-        self.model_ = RetinaNet()
+        self.model_ = FasterRCNN()
         self.writer = self.init_tensorboard(name='base')
         self.patch_transformer = PatchTransformerPro().cuda()
         self.patch_applier = PatchApplierPro().cuda()
         self.max_prob_extractor = MaxProbExtractor().cuda()
         self.total_variation = TotalVariation().cuda()
+        self.patch_evaluator = None
 
     def init_tensorboard(self, name=None):
         if name is not None:
@@ -55,12 +57,19 @@ class PatchTrainer(object):
             shuffle=True,
         )
 
+        test_data = DataLoader(
+            ListDatasetAnn(self.config.deepfashion_txt, number=100),
+            num_workers=1,
+            batch_size=self.config.batch_size
+        )
+
+        self.patch_evaluator = PatchEvaluator(self.model_, test_data)
+
         epoch_length = len(train_data)
         # generate a gray patch
         adv_patch_cpu = self.generate_patch(
-            load_from_file='/home/corona/attack/Fooling-Object-Detection-Network/patches/patch1.png')
+            load_from_file='/home/corona/attack/Fooling-Object-Detection-Network/patches/download.jpg')
         adv_patch_cpu.requires_grad_(True)
-
         # use adam to update adv_patch
         optimizer = torch.optim.Adam([adv_patch_cpu], lr=self.config.start_learning_rate)
         scheduler = self.config.scheduler_factory(optimizer)  # used to update learning rate
@@ -70,7 +79,7 @@ class PatchTrainer(object):
             ep_tv_loss = 0
             ep_loss = 0
             i_batch = 0
-            for image_batch, clothes_boxes_batch, _, labels_batch, landmarks_batch, segmentations_batch in tqdm(
+            for image_batch, clothes_boxes_batch, people_boxes_batch, labels_batch, landmarks_batch, segmentations_batch in tqdm(
                     train_data):
                 i_batch += 1
                 image_batch = image_batch.cuda()
@@ -86,10 +95,9 @@ class PatchTrainer(object):
                                                                        image_batch)
                 p_img_batch = self.patch_applier(image_batch, adv_batch_t, adv_batch_mask_t)
                 p_img_batch = F.interpolate(p_img_batch, (self.config.img_size[1], self.config.img_size[0]))
-
-                plt.imshow(np.array(functional.to_pil_image(p_img_batch[1])))
-                plt.show()
-
+                # show apply affection
+                # plt.imshow(np.array(functional.to_pil_image(p_img_batch[0])))
+                # plt.show()
                 max_prob = self.max_prob_extractor(self.model_, p_img_batch)
                 tv = self.total_variation(adv_patch)
                 tv_loss = tv * 2.5
@@ -123,10 +131,14 @@ class PatchTrainer(object):
                     torch.cuda.empty_cache()
 
             # save adversarial patch
-            adv_patch_save = adv_patch_cpu.clone()
-            adv_patch_save = transforms.ToPILImage()(adv_patch_save.detach().cpu())
-            adv_patch_save = np.asarray(np.uint8(adv_patch_save))
-            cv2.imwrite(os.path.join(self.config.save_adv_patch_path, str(epoch) + '.jpg'), adv_patch_save)
+            # adv_patch_save = adv_patch_cpu.clone()
+            # adv_patch_save = transforms.ToPILImage()(adv_patch_save.detach().cpu())
+            # adv_patch_save = np.asarray(np.uint8(adv_patch_save))
+            # cv2.imwrite(os.path.join(self.config.save_adv_patch_path, str(epoch) + '.jpg'), adv_patch_save)
+            with torch.no_grad():
+                adv = adv_patch_cpu.clone()
+                ap = self.patch_evaluator(adv, 0.7)  # ap70
+                self.writer.add_scalar('ap', ap, epoch)
 
             ep_det_loss = ep_det_loss / len(train_data)
             ep_tv_loss = ep_tv_loss / len(train_data)
@@ -136,7 +148,9 @@ class PatchTrainer(object):
             if True:
                 print('  EPOCH NR: ', epoch),
                 print('EPOCH LOSS: ', ep_loss)
+                print("AP: ", ap)
                 self.writer.add_scalar('ep_det_loss', ep_det_loss, epoch)
+
             print('  DET LOSS: ', ep_det_loss)
             print('   TV LOSS: ', ep_tv_loss)
             # del adv_batch_t, output, max_prob, det_loss, p_img_batch, nps_loss, tv_loss, loss

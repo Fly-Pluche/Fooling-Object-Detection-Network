@@ -1,4 +1,5 @@
 import torch
+import copy
 import time
 import logging
 import datetime
@@ -14,17 +15,12 @@ from torch.utils.data import DataLoader
 from patch import PatchTransformerPro, PatchApplierPro
 from patch_config import patch_configs
 from load_data import ListDatasetAnn
-from models import RetinaNet,MaskRCNN,FasterRCNN
+from models import RetinaNet, MaskRCNN, FasterRCNN
 from torchvision.transforms import functional
-
-# set random seed
-torch.manual_seed(2233)
-torch.cuda.manual_seed(2233)
-np.random.seed(2233)
 
 import os
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 
 class MaxProbExtractor(nn.Module):
@@ -115,7 +111,8 @@ class PatchEvaluator(nn.Module):
 
     def forward(self, adv_patch, threshold=0.5):
         predicts = self.inference_on_dataset(adv_patch)
-        ap = self.calculator.ap(self.class_id, predicts, self.ground_truths, self.image_sizes, threshold=threshold)
+        ground_truths = copy.deepcopy(self.ground_truths)
+        ap = self.calculator.ap(self.class_id, predicts, ground_truths, self.image_sizes, threshold=threshold)
         return ap
 
     def inference_on_dataset(self, adv_patch):
@@ -244,7 +241,7 @@ class CalculateAP:
         # avoid divide by zero in case the first detection matches a difficult
         # ground truth
         prec = tp / np.maximum(tp + fp, np.finfo(np.float64).eps)
-        ap = self.voc_ap(rec, prec,use_07_metric=True)
+        ap = self.voc_ap(rec, prec, use_07_metric=True)
         return ap
 
     def voc_ap(self, rec, prec, use_07_metric=False):
@@ -398,20 +395,20 @@ class CalculateAP:
 if __name__ == '__main__':
     patch_config = patch_configs['base']()
     # load train datasets
-    datasets = ListDatasetAnn(patch_config.deepfashion_txt, number=10)
+    datasets = ListDatasetAnn(patch_config.deepfashion_txt, number=100)
     data = DataLoader(
         datasets,
         batch_size=patch_config.batch_size,
         num_workers=2,
         shuffle=False,
     )
-    model = MaskRCNN()
+    model = RetinaNet()
     attack_evaluator = PatchEvaluator(model, data)
     # print(attack_evaluator.ground_truths)
-    patch = Image.open("/home/corona/attack/Fooling-Object-Detection-Network/images/OIP.jpeg")
+    patch = Image.open("/home/corona/attack/Fooling-Object-Detection-Network/patches/patch2.png")
     patch = patch.resize((500, 500))
     adv_patch = torch.cuda.FloatTensor(transforms.PILToTensor()(patch).cuda() / 255)
 
     adv_patch = adv_patch.cuda()
     ap = attack_evaluator(adv_patch)
-
+    print(ap)

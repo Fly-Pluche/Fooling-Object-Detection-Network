@@ -110,6 +110,20 @@ class FastRCNN(BaseModel):
         super(FastRCNN, self).__init__(model)
 
 
+# faster rcnn on pascal voc
+class FasterRCNNVOC(BaseModel):
+    def __init__(self):
+        model = "PascalVOC-Detection/faster_rcnn_R_50_C4.yaml"
+        super(FasterRCNNVOC, self).__init__(model)
+
+
+# faster rcnn on pascal voc
+class MaskRcnnX152(BaseModel):
+    def __init__(self):
+        model = "Misc/cascade_mask_rcnn_X_152_32x8d_FPN_IN5k_gn_dconv.yaml"
+        super(MaskRcnnX152, self).__init__(model)
+
+
 if __name__ == '__main__':
     import time
 

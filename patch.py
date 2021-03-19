@@ -455,7 +455,9 @@ class PatchTransformerPro(nn.Module):
         # calculate size
         # target_size = torch.stack([w1, w2], dim=2)
         # target_size = torch.max(target_size, dim=2).values  # [batch, boxes number] in
+        patch_scale = 1.3
         target_size = torch.add(w1, w2) / 2.
+        target_size = target_size * patch_scale
         # rotation patches to the right patch
         #  x15-x13   x17-x19     1
         # (——————— + ———————) * ———

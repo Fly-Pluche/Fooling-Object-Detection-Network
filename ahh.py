@@ -10,7 +10,7 @@ import json
 # image = np.array(Image.open('/home/ray/data/deepfashion2/validation/image/025781.jpg'))
 # plt.imshow(image)
 # plt.show()
-root = '/Users/keter/Documents/Fooling-Object-Detection-Network/train'
+root = '/home/ray/data/deepfashion2/train'
 json_files = os.listdir(root + '/annos')
 json_files = [os.path.join(root + '/annos', item) for item in json_files]
 
@@ -20,14 +20,14 @@ needed_points = [12, 20, 13, 19, 14, 18, 15, 17, 16]
 # anno = tools.parse_anno_file(root + '/annos/027581.json', need_classes=[1])
 # print(anno)
 
-f = open(root + '/train2.txt', 'w')
+f = open(root + '/TRAIN.txt', 'w')
+i = 0
 for item in tqdm(json_files):
     try:
         flag = 0
-        anno = tools.parse_anno_file(item, need_classes=[1, 2])
-        if len(anno['landmarks']) == 0:
-            flag = 1
-            continue
+        anno = tools.parse_anno_file(item, need_classes=[2])
+        print(anno)
+        break
         landmarks = np.array(anno['landmarks'])
         y = landmarks[..., 1]
         if len(y) == 0:
@@ -53,6 +53,8 @@ for item in tqdm(json_files):
                     flag = 1
         # print(item)
         if flag == 0:
+            i += 1
+            print(i)
             f.writelines(item + '\n')
     except:
         continue
