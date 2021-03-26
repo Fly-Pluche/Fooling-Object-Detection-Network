@@ -11,7 +11,7 @@ from torch.utils.data import DataLoader
 from load_data import ListDataset
 from torchvision import transforms
 from patch import PatchTransformer, PatchApplier, PatchGauss
-from evaluator import MaxProbExtractor, TotalVariation, PatchEvaluator
+from evaluator import MaxExtractor, TotalVariation, PatchEvaluator
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import torch.nn.functional as F
@@ -30,7 +30,7 @@ class PatchTrainer(object):
         self.writer = self.init_tensorboard(name='base')
         self.patch_transformer = PatchTransformer().cuda()
         self.patch_applier = PatchApplier().cuda()
-        self.max_prob_extractor = MaxProbExtractor().cuda()
+        self.max_prob_extractor = MaxExtractor().cuda()
         self.total_variation = TotalVariation().cuda()
         self.patch_gauss = PatchGauss().cuda()
 

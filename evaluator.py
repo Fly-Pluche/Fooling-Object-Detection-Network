@@ -6,23 +6,24 @@ import datetime
 import matplotlib.pyplot as plt
 import torch.nn as nn
 import numpy as np
+import torchvision
 import torch.nn.functional as F
 from torchvision import transforms
 from collections import OrderedDict
 from tqdm import tqdm
 from PIL import Image
 from torch.utils.data import DataLoader
-from patch import PatchTransformerPro, PatchApplierPro
+from patch import PatchTransformerPro, PatchApplierPro, PatchApplier, PatchTransformer
 from utils.parse_annotations import ParseTools
 from patch_config import patch_configs
 from load_data import ListDatasetAnn
 from models import RetinaNet, MaskRCNN, FasterRCNN
 from torchvision.transforms import functional
-
+import random
 import os
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
+# os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
 class MaxProbExtractor(nn.Module):
     """
@@ -31,6 +32,28 @@ class MaxProbExtractor(nn.Module):
 
     def __init__(self):
         super(MaxProbExtractor, self).__init__()
+
+    def forward(self, model, batch_image):
+        images = torch.unbind(batch_image, 0)
+        max_prob_t = torch.cuda.FloatTensor(batch_image.size(0)).fill_(0)
+        for i, image in enumerate(images):
+            output = model(image)["instances"]
+            pred_classes = output.pred_classes
+            scores = output.scores
+            people_scores = scores[pred_classes == 0]  # select people predict score
+            if len(people_scores) != 0:
+                max_prob = torch.max(people_scores)
+                max_prob_t[i] = max_prob
+        return max_prob_t
+
+
+class MaxExtractor(nn.Module):
+    """
+    get the max score and self information of the max iou in a batch of images
+    """
+
+    def __init__(self):
+        super(MaxExtractor, self).__init__()
         self.config = patch_configs['base']()
         self.tools = ParseTools()
 
@@ -100,6 +123,218 @@ class TotalVariation(nn.Module):
         tvcomp2 = torch.sum(torch.sum(tvcomp2, 0), 0)
         tv = tvcomp1 + tvcomp2
         return tv / torch.numel(adv_patch)
+
+
+class UnionDetector(nn.Module):
+    def __init__(self):
+        super(UnionDetector, self).__init__()
+        self.config = patch_configs['base']()
+
+    def forward(self, model, image_batch, p_image_batch, people_boxes):
+        """
+        Args:
+            image_batch: [batch size,3,w,h]
+            p_image_batch: [batch size,3,w,h]
+            people_boxes: []
+        """
+        # stitching a square picture
+        w = int(self.config.batch_size)
+        # random choose 2 normal images and 2 adversarial images
+        image_index1 = [i for i in range(0, w)]
+        random.shuffle(image_index1)
+        image_index2 = [i for i in range(w, w * 2)]
+        random.shuffle(image_index2)
+        index_ = int(w / 2)
+        if index_ < 2:
+            index_ = 2
+        image_index = image_index1[:index_] + image_index2[:index_]
+        random.shuffle(image_index)
+        image_index = torch.tensor(image_index, device='cuda')
+        # choose image and cat the images according the image index
+        images = torch.cat((image_batch, p_image_batch), dim=0)  # [2 * batch size,3,h,w]
+        images = images[image_index]
+        union_image = torchvision.utils.make_grid(images, nrow=int(w / 2), padding=0)
+        # plt.imshow(np.array(functional.to_pil_image(union_image)))
+        # plt.show()
+        # adjust boxes coordinates
+        people_boxes = torch.cat((people_boxes, people_boxes), dim=0)  # [4,3,4] => [8,3,4]
+        people_boxes = people_boxes[image_index]  # => [4,3,4]
+        s = people_boxes.size()
+        people_boxes = people_boxes.reshape((s[0] * s[1], s[2]))
+        # people_boxes = torch.unbind(people_boxes, dim=0)
+        # people_boxes = torch.cat(people_boxes, dim=0)
+        people_boxes[:, 0] = people_boxes[:, 0] * self.config.img_size[0]
+        people_boxes[:, 1] = people_boxes[:, 1] * self.config.img_size[1]
+        for i in range(0, people_boxes.size(0)):
+            if torch.sum(people_boxes[i]) != 0:
+                people_boxes[i][0] = people_boxes[i][0] + (self.config.img_size[0]) * (
+                        i // self.config.max_lab % int(w ** (1 / 2)))
+                people_boxes[i][1] = people_boxes[i][1] + (self.config.img_size[1]) * (
+                        i // (self.config.max_lab * int(w ** (1 / 2))))
+        people_boxes[:, 0] = people_boxes[:, 0]
+        people_boxes[:, 1] = people_boxes[:, 1]
+        people_boxes[:, 2] = (self.config.img_size[0]) * people_boxes[:, 2]
+        people_boxes[:, 3] = (self.config.img_size[1]) * people_boxes[:, 3]  # [x,y,w,h]
+
+        # [x,y,w,h] => [x,y,x,y]
+        people_boxes[:, 0] = people_boxes[:, 0] - people_boxes[:, 2] / 2
+        people_boxes[:, 1] = people_boxes[:, 1] - people_boxes[:, 3] / 2
+        people_boxes[:, 2] = people_boxes[:, 0] + people_boxes[:, 2]
+        people_boxes[:, 3] = people_boxes[:, 1] + people_boxes[:, 3]
+
+        output = model(union_image)["instances"]
+        pred_classes = output.pred_classes
+        scores = output.scores
+        boxes = output.pred_boxes.tensor
+        people_scores = scores[pred_classes == 0]  # select people predict score
+        boxes = boxes[pred_classes == 0, :]
+
+        # calculate iou
+        attack_image_id = image_index.clone()
+        # 0 is normal image, 1 is attack image
+        attack_image_id[attack_image_id >= self.config.batch_size] = 1
+        attack_image_id[attack_image_id != 1] = 0
+        # [batch size] => [batch size, max boxes number] => [batch size * max boxes number]
+        attack_image_id = attack_image_id.unsqueeze(-1)
+        attack_image_id = attack_image_id.expand((-1, self.config.max_lab)).clone()
+        attack_image_id = attack_image_id.reshape(np.prod(attack_image_id.size()))
+        needed_boxes = people_boxes.clone()
+        needed_boxes = torch.sum(needed_boxes, dim=1)
+        attack_image_id = attack_image_id[needed_boxes != 0]
+
+        predict_image_id = attack_image_id.clone().type(torch.float)
+        predict_image_id = predict_image_id.unsqueeze(-1)
+        predict_image_id = predict_image_id.expand((-1, 2)).clone()
+        predict_image_id[:, 1] = torch.abs(predict_image_id[:, 1] - 1)
+        people_boxes = people_boxes[needed_boxes != 0]
+
+        for i in range(people_boxes.size(0)):
+            if len(boxes) == 0:
+                break
+            ixmin = torch.maximum(people_boxes[i][0], boxes[:, 0])
+            iymin = torch.maximum(people_boxes[i][1], boxes[:, 1])
+            ixmax = torch.minimum(people_boxes[i][2], boxes[:, 2])
+            iymax = torch.minimum(people_boxes[i][3], boxes[:, 3])
+            iw = torch.maximum(ixmax - ixmin + 1., torch.tensor(0., device='cuda'))
+            ih = torch.maximum(iymax - iymin + 1., torch.tensor(0., device='cuda'))
+            inters = iw * ih
+            # union
+            uni = ((people_boxes[i][2] - people_boxes[i][0] + 1.) * (people_boxes[i][3] - people_boxes[i][1] + 1.) +
+                   (boxes[:, 2] - boxes[:, 0] + 1.) *
+                   (boxes[:, 3] - boxes[:, 1] + 1.) - inters)
+            overlaps = torch.max(inters / uni)
+            predict_image_id[i] = torch.tensor([overlaps, 1 - overlaps], device='cuda', dtype=torch.float)
+        attack_image_id = attack_image_id.type(torch.long)
+        # use temperature parameter to make cross entropy loss converging more better
+        predict_image_id = predict_image_id / 0.1
+        return predict_image_id, attack_image_id
+
+
+class PatchEvaluatorOld(nn.Module):
+    def __init__(self, model, data_loader):
+        super(PatchEvaluatorOld, self).__init__()
+        self.config = patch_configs['base']()
+        self.calculator = CalculateAP()
+        self.data_loader = None
+        self.model = None
+        self.predicts = None
+        self.ground_truths = None
+        self.image_sizes = None
+        self.register_dataset(model, data_loader)
+        self.patch_transformer = PatchTransformer().cuda()
+        self.patch_applier = PatchApplier().cuda()
+        self.class_id = 0  # the class you want to calculate ap
+
+    def register_dataset(self, model, data_loader):
+        self.data_loader = data_loader
+        self.model = model
+        self.ground_truths = self.get_people_dicts(data_loader)
+
+    # get people dicts from pytorch data loader
+    def get_people_dicts(self, data_loader):
+        dataset_dicts = []
+        for idx, (image_batch, _, people_boxes, labels_batch, _, _) in enumerate(
+                tqdm(data_loader, ascii=True, desc='load people\'s boxes information')):
+            for id in range(image_batch.size(0)):
+                boxes = people_boxes[id]
+                labels = labels_batch[id].view(-1)
+                boxes = boxes[labels == 0, :]
+                s = image_batch.size()
+                w = boxes[:, 2] * s[2]  # w
+                h = boxes[:, 3] * s[3]  # h
+                boxes[:, 0] = boxes[:, 0] * s[2] - w / 2
+                boxes[:, 1] = boxes[:, 1] * s[3] - h / 2
+                boxes[:, 2] = boxes[:, 0] + w
+                boxes[:, 3] = boxes[:, 1] + h
+                det = np.zeros(boxes.size(0))
+                dataset_dicts.append({
+                    'bbox': boxes.numpy(),
+                    'det': det
+                })
+        dataset_dicts = np.array(dataset_dicts)
+        return dataset_dicts
+
+    def forward(self, adv_patch, threshold=0.5):
+        predicts = self.inference_on_dataset(adv_patch)
+        ground_truths = copy.deepcopy(self.ground_truths)
+        ap = self.calculator.ap(self.class_id, predicts, ground_truths, self.image_sizes, threshold=threshold)
+        return ap
+
+    def inference_on_dataset(self, adv_patch):
+        """
+        Run model on the data_loader and evaluate the metrics with evaluator.
+        Also benchmark the inference speed of `model.forward` accurately.
+        The model will be used in eval mode.
+        """
+        images_ids_ = []
+        confidences_ = []
+        BB = []
+        with torch.no_grad():
+            for id, (
+                    image_batch, clothes_boxes_batch, people_boxes_batch, labels_batch, landmarks_batch,
+                    segmentations_batch) in enumerate(
+                tqdm(self.data_loader)):
+                image_batch = image_batch.cuda()
+                adv_patch = adv_patch.cuda()
+                people_boxes_batch = people_boxes_batch.cuda()
+                adv_batch_t = self.patch_transformer(adv_patch, people_boxes_batch, labels_batch)
+                p_img_batch = self.patch_applier(image_batch, adv_batch_t)
+                p_img_batch = F.interpolate(p_img_batch, (self.config.img_size[1], self.config.img_size[0]))
+                images = torch.unbind(p_img_batch, dim=0)
+                for idx, image in enumerate(images):
+                    outputs = self.model(image)
+                    # a = model.visual_instance_predictions(image, outputs)
+                    # plt.imshow(a)
+                    # plt.show()
+                    outputs = outputs['instances']
+                    boxes = outputs.pred_boxes
+                    scores = outputs.scores
+                    classes = outputs.pred_classes
+
+                    # select the class we want
+                    boxes = boxes[classes == self.class_id].tensor
+                    scores = scores[classes == self.class_id]
+                    classes = classes[classes == self.class_id]
+                    classes = classes[scores >= 0.5]
+                    boxes = boxes[scores >= 0.5, :]
+                    scores = scores[scores >= 0.5]
+
+                    images_ids = torch.cuda.FloatTensor(boxes.size(0), 1).fill_(idx + id * self.config.batch_size)
+
+                    scores = scores.unsqueeze(-1)
+
+                    classes = classes.unsqueeze(-1)
+                    classes = torch.cat((images_ids, classes), dim=1)
+                    boxes = torch.cat((images_ids, boxes), dim=1)
+                    images_ids_.append(images_ids)
+                    BB.append(boxes)
+                    confidences_.append(scores)
+
+        images_ids_ = torch.cat(images_ids_, dim=0).squeeze(-1)
+
+        BB = torch.cat(BB, dim=0)
+        confidences_ = torch.cat(confidences_, dim=0).squeeze(-1)
+        return (images_ids_, confidences_, BB)
 
 
 class PatchEvaluator(nn.Module):
@@ -314,37 +549,6 @@ class CalculateAP:
             # and sum (\Delta recall) * prec
             ap = np.sum((mrec[i + 1] - mrec[i]) * mpre[i + 1])  # 计算PR曲线向下包围的面积
         return ap
-
-    # def ap(self, class_id, predicts, ground_truths, image_sizes, threshold=0.5):
-    #     """
-    #     calculate ap of one class
-    #     class id: the class which you want to calculate ap
-    #     predicts: a list contains numpy arrays  np array format [n,6]
-    #     ground_truths: box and label information read from datasets
-    #     image_sizes: [(width,height),(width,height) ... ] recording the images' width and height
-    #     threshold:  box's iou > threshold means this box is a right box
-    #     """
-    #     precisions = []
-    #     recalls = []
-    #     # calculate predictions and recalls
-    #     for predict, ground_truth, image_size in zip(predicts, ground_truths, image_sizes):
-    #         precision, recall = self.precision_recall(class_id, np.array(predict), np.array(ground_truth), image_size,
-    #                                                   threshold)
-    #         precisions.append(precision)
-    #         recalls.append(recall)
-    #     # correct AP calculation
-    #     # first append sentinel values at the end
-    #     mrec = np.concatenate(([0.], recalls, [1.]))
-    #     mpre = np.concatenate(([0.], precisions, [0.]))
-    #
-    #     # compute the precision envelope
-    #     for i in range(mpre.size - 1, 0, -1):
-    #         mpre[i - 1] = np.maximum(mpre[i - 1], mpre[i])
-    #     # to calculate area under PR curve, look for points
-    #     # where X axis (recall) changes value
-    #     i = np.where(mrec[1:] != mrec[:-1])[0]
-    #     ap = np.sum((mrec[i + 1] - mrec[i]) * mpre[i + 1])
-    #     return ap
 
     def precision_recall(self, class_id, predict, ground_truth, image_size, threshold=0.5, predict_type='xyxy',
                          ground_truth_type='xywh'):

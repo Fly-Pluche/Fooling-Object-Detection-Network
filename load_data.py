@@ -29,14 +29,16 @@ class ListDataset(Dataset):
         labels: [-1,4]
     """
 
-    def __init__(self, txt, number=None):
+    def __init__(self, txt, number=None, range_=None):
         super(ListDataset, self).__init__()
         self.parser = ParseTools()
         self.configs = patch_configs['base']()
-        if number is None:
-            self.file_list = self.parser.load_file_txt(txt)
-        else:
+        if number is not None:
             self.file_list = self.parser.load_file_txt(txt)[:number]
+        elif range_ is not None:
+            self.file_list = self.parser.load_file_txt(txt)[range_[0]:range_[1]]
+        else:
+            self.file_list = self.parser.load_file_txt(txt)
         self.max_lab = 21
 
     def __getitem__(self, id):
@@ -91,11 +93,12 @@ class ListDataset(Dataset):
 
 
 class ListDatasetAnn(ListDataset):
-    def __init__(self, txt, number=None, name=False):
-        super(ListDatasetAnn, self).__init__(txt, number)
+    def __init__(self, txt, number=None, name=False, range_=None):
+        super(ListDatasetAnn, self).__init__(txt, number, range_)
         self.needed_classes = [1]  # the type clothes you want to select
-        self.max_lab = 3
-        self.max_landmarks = 3
+        self.configs = patch_configs['base']()
+        self.max_lab = self.configs.max_lab
+        self.max_landmarks = self.configs.max_lab
         self.name = name
         self.tools = ParseTools()
 

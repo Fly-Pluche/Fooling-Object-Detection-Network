@@ -146,7 +146,7 @@ class PatchTransformer(nn.Module):
         boxes_batch_scaled[:, :, 2] = boxes_batch[:, :, 2] * img_size[0]
         boxes_batch_scaled[:, :, 3] = boxes_batch[:, :, 3] * img_size[1]
         target_size = torch.sqrt_(
-            ((boxes_batch_scaled[:, :, 2].mul(0.3)) ** 2) + ((boxes_batch_scaled[:, :, 3].mul(0.3)) ** 2)
+            ((boxes_batch_scaled[:, :, 2].mul(0.2)) ** 2) + ((boxes_batch_scaled[:, :, 3].mul(0.2)) ** 2)
         )
         target_x = boxes_batch[:, :, 0].view(np.prod(batch_size))
         target_y = boxes_batch[:, :, 1].view(np.prod(batch_size))
@@ -216,12 +216,7 @@ class PatchApplierPro(nn.Module):
         super(PatchApplierPro, self).__init__()
 
     def forward(self, img_batch, adv_batch, adv_mask_batch):
-        # plt.imshow(np.array(functional.to_pil_image(adv_batch[0][1])))
-        # plt.show()
-        # plt.imshow(np.array(functional.to_pil_image(adv_mask_batch[0][0])))
-        # plt.show()
-        # plt.imshow(np.array(functional.to_pil_image(img_batch[0])))
-        # plt.show()
+        img_batch = img_batch.clone()
         advs = torch.unbind(adv_batch, 1)
         masks = torch.unbind(adv_mask_batch, 1)
         # adv_batch [4, 15, 3, 416, 416]
@@ -298,7 +293,7 @@ class PatchGauss(nn.Module):
         # [2,n,1,1]
         coordinates = coordinates.unsqueeze(-1)
         # [2,n,patch_size,patch_size]
-        adv_patch = coordinates.expand(-1, -1, self.configs.patch_size, self.configs.patch_size).clone()
+        adv_patch = coordinates.expand(-1, -1, self.configs.patch_size, self.configs.patch_size)
         # produce the gray background patch
         back_patch = torch.cuda.FloatTensor([0.35])
         back_patch = back_patch.unsqueeze(0)
@@ -409,13 +404,13 @@ class PatchTransformerPro(nn.Module):
         self.patch_config = patch_configs['base']()
         self.patch_delaunay2d = PatchDelaunay2D()
         self.needed_points = [11, 12, 13, 14, 15, 16, 17, 18, 19]
-        self.gaussian_blur = GaussianBlur(5, 3)
+        self.gaussian_blur = GaussianBlur(3, 1)
 
     def numpy_expand(self, array):
         array = torch.from_numpy(array)
         array = array.unsqueeze(-1)
         array = array.unsqueeze(-1)
-        array = array.expand((-1, -1, self.patch_delaunay2d.seeds_num, 2)).numpy()
+        array = array.expand((-1, -1, self.patch_delaunay2d.seeds_num, 2)).clone().numpy()
         return array
 
     def forward(self, adv_patch, boxes_batch, segmentations_batch, points_batch, images_batch):
@@ -427,7 +422,7 @@ class PatchTransformerPro(nn.Module):
         adv_patch = adv_patch.unsqueeze(0)  # [3,w,h] ==> [1,3,w,h]
         adv_patch = adv_patch.unsqueeze(0)  # [1,3,w,h] ==> [1,1,3,w,h]
         adv_batch = adv_patch.expand(boxes_batch.size(0), boxes_number, -1, -1,
-                                     -1)  # [1,1,3,w,h] ==> [batch size,boxes num,3,w,h]
+                                     -1).clone()  # [1,1,3,w,h] ==> [batch size,boxes num,3,w,h]
 
         # create adv patches' masks
         adv_mask_batch_t = torch.ones_like(adv_batch).cuda()
