@@ -17,7 +17,9 @@ from patch import PatchTransformerPro, PatchApplierPro, PatchApplier, PatchTrans
 from utils.parse_annotations import ParseTools
 from patch_config import patch_configs
 from load_data import ListDatasetAnn
+from models import *
 from models import RetinaNet, MaskRCNN, FasterRCNN
+from PIL import Image
 from torchvision.transforms import functional
 import random
 import os
@@ -153,9 +155,10 @@ class UnionDetector(nn.Module):
         # choose image and cat the images according the image index
         images = torch.cat((image_batch, p_image_batch), dim=0)  # [2 * batch size,3,h,w]
         images = images[image_index]
-        union_image = torchvision.utils.make_grid(images, nrow=int(w / 2), padding=0)
+        union_image = torchvision.utils.make_grid(images, nrow=int(w ** (1 / 2)), padding=0)
         # plt.imshow(np.array(functional.to_pil_image(union_image)))
         # plt.show()
+
         # adjust boxes coordinates
         people_boxes = torch.cat((people_boxes, people_boxes), dim=0)  # [4,3,4] => [8,3,4]
         people_boxes = people_boxes[image_index]  # => [4,3,4]
@@ -381,8 +384,11 @@ class PatchEvaluator(nn.Module):
         dataset_dicts = np.array(dataset_dicts)
         return dataset_dicts
 
-    def forward(self, adv_patch, threshold=0.5):
-        predicts = self.inference_on_dataset(adv_patch)
+    def forward(self, adv_patch, threshold=0.5, clean=False):
+        if not clean:
+            predicts = self.inference_on_dataset(adv_patch)
+        else:
+            predicts = self.inference_on_dataset_clean()
         ground_truths = copy.deepcopy(self.ground_truths)
         ap = self.calculator.ap(self.class_id, predicts, ground_truths, self.image_sizes, threshold=threshold)
         return ap
@@ -413,6 +419,57 @@ class PatchEvaluator(nn.Module):
                 p_img_batch = self.patch_applier(image_batch, adv_batch_t, adv_batch_mask_t)
                 p_img_batch = F.interpolate(p_img_batch, (self.p_config.img_size[1], self.p_config.img_size[0]))
                 images = torch.unbind(p_img_batch, dim=0)
+                for idx, image in enumerate(images):
+                    outputs = self.model(image)
+                    # a = model.visual_instance_predictions(image, outputs)
+                    # plt.imshow(a)
+                    # plt.show()
+                    outputs = outputs['instances']
+                    boxes = outputs.pred_boxes
+                    scores = outputs.scores
+                    classes = outputs.pred_classes
+
+                    # select the class we want
+                    boxes = boxes[classes == self.class_id].tensor
+                    scores = scores[classes == self.class_id]
+                    classes = classes[classes == self.class_id]
+                    classes = classes[scores >= 0.5]
+                    boxes = boxes[scores >= 0.5, :]
+                    scores = scores[scores >= 0.5]
+
+                    images_ids = torch.cuda.FloatTensor(boxes.size(0), 1).fill_(idx + id * self.p_config.batch_size)
+
+                    scores = scores.unsqueeze(-1)
+
+                    classes = classes.unsqueeze(-1)
+                    classes = torch.cat((images_ids, classes), dim=1)
+                    boxes = torch.cat((images_ids, boxes), dim=1)
+                    images_ids_.append(images_ids)
+                    BB.append(boxes)
+                    confidences_.append(scores)
+
+        images_ids_ = torch.cat(images_ids_, dim=0).squeeze(-1)
+
+        BB = torch.cat(BB, dim=0)
+        confidences_ = torch.cat(confidences_, dim=0).squeeze(-1)
+        return (images_ids_, confidences_, BB)
+
+    def inference_on_dataset_clean(self):
+        """
+        Run model on the data_loader and evaluate the metrics with evaluator.
+        Also benchmark the inference speed of `model.forward` accurately.
+        The model will be used in eval mode.
+        """
+        images_ids_ = []
+        confidences_ = []
+        BB = []
+        with torch.no_grad():
+            for id, (
+                    image_batch, clothes_boxes_batch, _, _, landmarks_batch, segmentations_batch) in enumerate(
+                tqdm(self.data_loader)):
+                image_batch = image_batch.cuda()
+                image_batch = F.interpolate(image_batch, (self.p_config.img_size[1], self.p_config.img_size[0]))
+                images = torch.unbind(image_batch, dim=0)
                 for idx, image in enumerate(images):
                     outputs = self.model(image)
                     # a = model.visual_instance_predictions(image, outputs)
@@ -635,22 +692,29 @@ class CalculateAP:
 
 
 if __name__ == '__main__':
-    patch_config = patch_configs['base']()
-    # load train datasets
-    datasets = ListDatasetAnn(patch_config.deepfashion_txt, number=100)
-    data = DataLoader(
-        datasets,
-        batch_size=patch_config.batch_size,
-        num_workers=2,
-        shuffle=False,
-    )
-    model = RetinaNet()
-    attack_evaluator = PatchEvaluator(model, data)
-    # print(attack_evaluator.ground_truths)
-    patch = Image.open("/home/corona/attack/Fooling-Object-Detection-Network/patches/patch2.png")
-    patch = patch.resize((500, 500))
-    adv_patch = torch.cuda.FloatTensor(transforms.PILToTensor()(patch).cuda() / 255)
+    import warnings
 
-    adv_patch = adv_patch.cuda()
-    ap = attack_evaluator(adv_patch)
-    print(ap)
+    warnings.filterwarnings("ignore")
+    configs = patch_configs['base']()
+    test_data = DataLoader(
+        ListDatasetAnn(configs.deepfashion_txt, range_=[800, 880]),
+        num_workers=1,
+        batch_size=configs.batch_size
+    )
+    models = [FasterRCNN_R50_C4, FasterRCNN_R_50_DC5, FasterRCNN_R50_FPN, FasterRCNN_R_101_FPN, FasterRCNN, RetinaNet,
+              MaskRCNN]
+    images = ['R50_DC5.jpg', 'R50_FPN.jpg', 'R101_FPN.jpg', 'R50_C4.jpg']
+    for image in images:
+        print(image)
+        path = os.path.join('/home/corona/attack/Fooling-Object-Detection-Network/patches', image)
+        adv = Image.open(path)
+        adv = torchvision.transforms.functional.pil_to_tensor(adv) / 255.
+        for item in models:
+            model = item()
+            patch_evaluator = PatchEvaluator(model, test_data)
+            ap = patch_evaluator(adv, clean=False)
+            print(ap)
+            del model, patch_evaluator
+
+        print('=' * 50)
+        print('=' * 50)

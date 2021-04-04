@@ -25,10 +25,10 @@ np.random.seed(2233)
 
 
 class PatchTrainer(object):
-    def __init__(self):
+    def __init__(self, model):
         super(PatchTrainer, self).__init__()
         self.config = patch_configs['base']()  # load base config
-        self.model_ = RetinaNet()
+        self.model_ = model
         self.log_path = None
         self.writer = self.init_tensorboard(name='base')
         self.patch_transformer = PatchTransformerPro().cuda()
@@ -101,6 +101,9 @@ class PatchTrainer(object):
                 # show apply affection
                 # plt.imshow(np.array(functional.to_pil_image(p_img_batch[0])))
                 # plt.show()
+                # calculate union iou loss
+                predicted_id, attack_id = self.union_detector(self.model_, image_batch, p_img_batch, people_boxes_batch)
+                union_iou_loss = self.entropy(predicted_id, attack_id)
                 max_prob, max_iou_t = self.max_extractor(self.model_, p_img_batch, people_boxes_batch)
                 tv = self.total_variation(adv_patch)
                 tv_loss = tv * 2
@@ -109,10 +112,7 @@ class PatchTrainer(object):
                 det_loss = torch.mean(I_max_prob)
                 # calculate iou loss
                 iou_loss = torch.mean(max_iou_t)
-                # calculate union iou loss
-                predicted_id, attack_id = self.union_detector(self.model_, image_batch, p_img_batch, people_boxes_batch)
                 # calculate cross entropy of union detector
-                union_iou_loss = self.entropy(predicted_id, attack_id)
                 loss = det_loss + torch.max(tv_loss, torch.tensor(0.1).cuda()) + iou_loss + union_iou_loss
                 # evaluate
                 ep_det_loss += det_loss.detach().cpu().numpy()

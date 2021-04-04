@@ -13,6 +13,7 @@ from torch import nn
 from utils.img_tools import ImageTools
 from predict import Predictor
 from utils.visualizer import Visualizer_
+import mmcv
 
 
 # import os
@@ -117,6 +118,31 @@ class FasterRCNNVOC(BaseModel):
         super(FasterRCNNVOC, self).__init__(model)
 
 
+class FasterRCNN_R50_C4(BaseModel):
+    def __init__(self):
+        model = "COCO-Detection/faster_rcnn_R_50_C4_1x.yaml"
+        super(FasterRCNN_R50_C4, self).__init__(model)
+
+
+class FasterRCNN_R_50_DC5(BaseModel):
+    def __init__(self):
+        model = "COCO-Detection/faster_rcnn_R_50_DC5_1x.yaml"
+        super(FasterRCNN_R_50_DC5, self).__init__(model)
+
+
+class FasterRCNN_R50_FPN(BaseModel):
+    def __init__(self):
+        model = "COCO-Detection/faster_rcnn_R_50_FPN_3x.yaml"
+        super(FasterRCNN_R50_FPN, self).__init__(model)
+
+
+
+class FasterRCNN_R_101_FPN(BaseModel):
+    def __init__(self):
+        model = "COCO-Detection/faster_rcnn_R_101_FPN_3x.yaml"
+        super(FasterRCNN_R_101_FPN, self).__init__(model)
+
+
 # faster rcnn on pascal voc
 class MaskRcnnX152(BaseModel):
     def __init__(self):
@@ -128,10 +154,16 @@ if __name__ == '__main__':
     import time
 
     t = ImageTools()
-    faster = FasterRCNN()
-    a = RetinaNet()
-    b = FastRCNN()
-    c = MaskRCNN()
+    FasterRCNN_R50_C4()
+    FasterRCNN_R_50_DC5()
+    FasterRCNN_R50_FPN()
+    FasterRCNN_R_101_FPN()
+
+    # faster = FasterRCNN()
+    # a = RetinaNet()
+    # b = FastRCNN()
+    # c = MaskRCNN()
+    # d = FasterRCNNVOC()
     # im = cv2.imread('/home/corona/datasets/flir_yolo/train/images/06478.jpeg')
     # time1 = time.time()
     # outputs = faster(im)["instances"]
