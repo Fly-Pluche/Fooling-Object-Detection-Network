@@ -16,71 +16,71 @@
 #     os.system('sudo cp %s %s' % (file_path, b))
 
 
-# import json
-# import torch
-# import matplotlib.pyplot as plt
-# import numpy as np
-# from PIL import Image
-# import cv2
-#
-# annos_path = '/home/ray/data/deepfooling/annos/143462.json'
-# images_path = '/home/ray/data/deepfooling/image/143462.jpg'
-#
-# with open(annos_path, 'r') as f:
-#     anno = json.loads(f.read())
-# import copy
-#
-# people_box = np.array(anno['people_boxes'][0], dtype=np.int32)
-# a = np.array(cv2.imread(images_path), dtype=np.uint8)
-# for item in anno:
-#     if 'item' in item:
-#         anno_item = anno[item]
-#         if anno_item['category_name'] != 'short sleeve top':
-#             continue
-#         landmarks = torch.tensor(anno[item]['landmarks'])
-#         landmarks = landmarks.view(-1, 3)
-#         # landmarks =
-#         temp1 = copy.deepcopy(landmarks[6])
-#         temp2 = copy.deepcopy(landmarks[7])
-#         temp3 = copy.deepcopy(landmarks[8])
-#         temp4 = copy.deepcopy(landmarks[9])
-#         temp5 = copy.deepcopy(landmarks[10])
-#         temp6 = copy.deepcopy(landmarks[11])
-#         temp7 = copy.deepcopy(landmarks[12])
-#         temp8 = copy.deepcopy(landmarks[13])
-#         temp9 = copy.deepcopy(landmarks[14])
-#         landmarks[6] = landmarks[24]
-#         landmarks[7] = landmarks[23]
-#         landmarks[8] = landmarks[22]
-#         landmarks[9] = landmarks[21]
-#         landmarks[10] = landmarks[20]
-#         landmarks[11] = landmarks[19]
-#         landmarks[12] = landmarks[18]
-#         landmarks[13] = landmarks[17]
-#         landmarks[14] = landmarks[16]
-#         landmarks[24] = temp1
-#         landmarks[23] = temp2
-#         landmarks[22] = temp3
-#         landmarks[21] = temp4
-#         landmarks[20] = temp5
-#         landmarks[19] = temp6
-#         landmarks[18] = temp7
-#         landmarks[17] = temp8
-#         landmarks[16] = temp9
-#         landmarks = landmarks[1:, :2]
-#         # landmarks = landmarks.unsqueeze(0)
-#         landmarks = np.array(landmarks, dtype=np.int32)
-#         zeros = np.zeros((a.shape), dtype=np.uint8)
-#         mask = cv2.fillPoly(zeros, [landmarks], color=(0, 164, 120))
-#         a = cv2.addWeighted(a, 0.8, mask, 0.5, 0)
-#         cv2.polylines(a, [landmarks], isClosed=True, thickness=5, color=(144, 238, 144))
-#         cv2.rectangle(a, (people_box[0], people_box[1]), (people_box[2], people_box[3]), (255,227,132), 2)
-#         for i in landmarks:
-#             cv2.circle(a, tuple(i), 2, (185, 130, 66), 4)
-#         plt.imshow(a)
-#         plt.show()
-#         cv2.imwrite('images/3.jpg', a)
-# print(anno)
+import json
+import torch
+import matplotlib.pyplot as plt
+import numpy as np
+from PIL import Image
+import cv2
+
+annos_path = '/home/ray/data/deepfooling/annos/045404.json'
+images_path = '/home/ray/data/deepfooling/image/045404.jpg'
+
+with open(annos_path, 'r') as f:
+    anno = json.loads(f.read())
+import copy
+
+people_box = np.array(anno['people_boxes'][0], dtype=np.int32)
+a = np.array(cv2.imread(images_path), dtype=np.uint8)
+for item in anno:
+    if 'item' in item:
+        anno_item = anno[item]
+        if anno_item['category_name'] != 'short sleeve top':
+            continue
+        landmarks = torch.tensor(anno[item]['landmarks'])
+        landmarks = landmarks.view(-1, 3)
+        # landmarks =
+        temp1 = copy.deepcopy(landmarks[6])
+        temp2 = copy.deepcopy(landmarks[7])
+        temp3 = copy.deepcopy(landmarks[8])
+        temp4 = copy.deepcopy(landmarks[9])
+        temp5 = copy.deepcopy(landmarks[10])
+        temp6 = copy.deepcopy(landmarks[11])
+        temp7 = copy.deepcopy(landmarks[12])
+        temp8 = copy.deepcopy(landmarks[13])
+        temp9 = copy.deepcopy(landmarks[14])
+        landmarks[6] = landmarks[24]
+        landmarks[7] = landmarks[23]
+        landmarks[8] = landmarks[22]
+        landmarks[9] = landmarks[21]
+        landmarks[10] = landmarks[20]
+        landmarks[11] = landmarks[19]
+        landmarks[12] = landmarks[18]
+        landmarks[13] = landmarks[17]
+        landmarks[14] = landmarks[16]
+        landmarks[24] = temp1
+        landmarks[23] = temp2
+        landmarks[22] = temp3
+        landmarks[21] = temp4
+        landmarks[20] = temp5
+        landmarks[19] = temp6
+        landmarks[18] = temp7
+        landmarks[17] = temp8
+        landmarks[16] = temp9
+        landmarks = landmarks[1:, :2]
+        # landmarks = landmarks.unsqueeze(0)
+        landmarks = np.array(landmarks, dtype=np.int32)
+        zeros = np.zeros((a.shape), dtype=np.uint8)
+        mask = cv2.fillPoly(zeros, [landmarks], color=(0, 164, 120))
+        a = cv2.addWeighted(a, 0.8, mask, 0.5, 0)
+        cv2.polylines(a, [landmarks], isClosed=True, thickness=5, color=(144, 238, 144))
+        cv2.rectangle(a, (people_box[0], people_box[1]), (people_box[2], people_box[3]), (255, 227, 132), 2)
+        for i in landmarks:
+            cv2.circle(a, tuple(i), 2, (185, 130, 66), 4)
+        plt.imshow(a)
+        plt.show()
+        cv2.imwrite('images/5.jpg', a)
+print(anno)
 
 """
 masks_batch = []
@@ -113,6 +113,20 @@ return masks_batch
 # cv2.imwrite('images/2.jpg', b)
 # cv2.imwrite('images/3.jpg', c)
 
-import cv2
-a = cv2.imread('/home/corona/attack/Fooling-Object-Detection-Network/patches/MaskRCNN.jpg')
-print(a.shape)
+# import cv2
+# a = cv2.imread('/home/corona/attack/Fooling-Object-Detection-Network/patches/MaskRCNN.jpg')
+# print(a.shape)
+
+
+
+import pycocotools
+
+
+
+
+
+
+
+
+
+

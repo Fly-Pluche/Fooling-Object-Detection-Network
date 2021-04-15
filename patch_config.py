@@ -18,14 +18,14 @@ class BaseConfig(object):
         self.save_adv_patch_path = '/home/corona/attack/Fooling-Object-Detection-Network/patches'
         self.deepfashion_txt = '/home/ray/data/deepfashion2/train/train.txt'
         # self.deepfashion_txt = '/home/ray/data/deepfashion2/train/train.txt'
-        self.patch_size = 500
+        self.patch_size = 50
         self.root_path = '/home/ray/data/deepfashion2/train'
         self.start_learning_rate = 0.006
         self.patch_name = 'base'
         self.scheduler_factory = lambda x: optim.lr_scheduler.ReduceLROnPlateau(x, 'min', patience=50)
-        self.batch_size = 4
+        self.batch_size = 2
         # width height
-        self.img_size = (1000, 1000)
+        self.img_size = (200, 200)
         self.img_size_big = self.img_size
         # the number of gauss function
         self.gauss_num = 20

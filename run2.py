@@ -1,11 +1,11 @@
 from __future__ import absolute_import
 
-from train_patch_Pro import *
+from train_patch_old import *
 
 import os
 
 # os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 
 if __name__ == '__main__':

@@ -19,7 +19,7 @@ class Visualizer_(Visualizer):
             img_rgb = self.tensor2rgb(img)
         else:
             img_rgb = img
-        super(Visualizer_, self).__init__(img_rgb[:, :, ::-1], MetadataCatalog.get(model.cfg.DATASETS.TRAIN[0]))
+        super(Visualizer_, self).__init__(img_rgb, MetadataCatalog.get(model.cfg.DATASETS.TRAIN[0]))
         self.threshold = threshold
 
     def tensor2rgb(self, img):

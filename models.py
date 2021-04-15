@@ -45,13 +45,14 @@ class BaseModel(nn.Module):
         """
         return self.default_predictor(img)
 
-    def visual_instance_predictions(self, img, output, mode='tensor'):
+    def visual_instance_predictions(self, img, output, mode='tensor', threshold=0.5):
         """
         draw instance boxes on the image
         """
-        v = Visualizer_(img, self, mode=mode)
-        out = v.draw_instance_predictions(output["instances"].to('cpu'))
-        return out.get_image()[:, :, ::-1]
+        v = Visualizer_(img, self, threshold=threshold, mode=mode)
+        output = output["instances"].to('cpu')
+        out = v.draw_instance_predictions(output)
+        return out.get_image()
 
     def trainer(self, train_datasets_name, num_workers=2, img_per_batch=2, base_lr=1e-3, max_iter=300,
                 batch_size_per_image=128, num_classes=1, output_dir='outs'
@@ -134,7 +135,6 @@ class FasterRCNN_R50_FPN(BaseModel):
     def __init__(self):
         model = "COCO-Detection/faster_rcnn_R_50_FPN_3x.yaml"
         super(FasterRCNN_R50_FPN, self).__init__(model)
-
 
 
 class FasterRCNN_R_101_FPN(BaseModel):

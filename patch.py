@@ -21,6 +21,7 @@ from utils.parse_annotations import ParseTools
 
 import os
 
+
 # os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
 
@@ -405,6 +406,11 @@ class PatchTransformerPro(nn.Module):
         self.patch_delaunay2d = PatchDelaunay2D()
         self.needed_points = [11, 12, 13, 14, 15, 16, 17, 18, 19]
         self.gaussian_blur = GaussianBlur(3, 1)
+        self.min_contrast = 0.8  # min contrast
+        self.max_contrast = 1.2  # max contrast
+        self.min_brightness = -0.1  # min brightness
+        self.max_brightness = 0.1  # max brightness
+        self.noise_factor = 0.10  # a limit to noise
 
     def numpy_expand(self, array):
         array = torch.from_numpy(array)
@@ -424,6 +430,29 @@ class PatchTransformerPro(nn.Module):
         adv_batch = adv_patch.expand(boxes_batch.size(0), boxes_number, -1, -1,
                                      -1).clone()  # [1,1,3,w,h] ==> [batch size,boxes num,3,w,h]
 
+        batch_size = torch.Size((boxes_batch.size(0), boxes_batch.size(1)))
+
+        # Create random contrast tensor
+        contrast = torch.cuda.FloatTensor(batch_size).uniform_(self.min_contrast, self.max_contrast)
+        contrast = contrast.unsqueeze(-1).unsqueeze(-1).unsqueeze(-1)
+        contrast = contrast.expand(-1, -1, adv_batch.size(-3), adv_batch.size(-2), adv_batch.size(-1))
+        contrast = contrast.cuda()
+
+        # Create random brightness tensor
+        brightness = torch.cuda.FloatTensor(batch_size).uniform_(self.min_brightness, self.max_brightness)
+        brightness = brightness.unsqueeze(-1).unsqueeze(-1).unsqueeze(-1)
+        brightness = brightness.expand(-1, -1, adv_batch.size(-3), adv_batch.size(-2), adv_batch.size(-1))
+        brightness = brightness.cuda()
+
+        # Create random noise tensor
+        noise = torch.cuda.FloatTensor(adv_batch.size()).uniform_(-1, 1) * self.noise_factor
+
+        # apply contrast, brightness and clamp
+        adv_batch = adv_batch * contrast + brightness + noise
+        adv_batch = torch.clamp(adv_batch, 0.000001, 0.999999)
+
+        # plt.imshow(np.array(functional.to_pil_image(adv_batch[0, 0])))
+        # plt.show()
         # create adv patches' masks
         adv_mask_batch_t = torch.ones_like(adv_batch).cuda()
         img_size = torch.tensor(self.patch_config.img_size_big)

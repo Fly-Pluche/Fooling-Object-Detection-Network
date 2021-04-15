@@ -15,5 +15,5 @@ if __name__ == '__main__':
 
         sys.path.append('/home/corona/attack/Fooling-Object-Detection-Network')
 
-    trainer = PatchTrainer(RetinaNet())
+    trainer = PatchTrainer()
     trainer.train()

@@ -77,7 +77,7 @@ class MaxExtractor(nn.Module):
             boxes = output.pred_boxes.tensor
             people_scores = scores[pred_classes == 0]  # select people predict score
             boxes = boxes[pred_classes == 0]
-            iou_I_sum = torch.tensor(0., device='cuda')
+            iou_max = torch.tensor(0., device='cuda')
             gt_boxes = people_boxes[i]
             mask_gt_boxes = torch.sum(gt_boxes, dim=-1)
             gt_boxes = gt_boxes[mask_gt_boxes != 0]
@@ -97,13 +97,14 @@ class MaxExtractor(nn.Module):
 
                 overlaps = inters / uni
                 overlaps = torch.max(overlaps)
-                I = torch.log2(1 / (1 - overlaps))
-                iou_I_sum = iou_I_sum + I
+                iou_max = torch.max(iou_max, overlaps)
 
             if len(people_scores) != 0:
                 max_prob = torch.max(people_scores)
+                max_prob = max_prob + 1
+                max_prob = torch.sqrt(max_prob)
                 max_prob_t[i] = max_prob
-                max_iou_t[i] = iou_I_sum
+                max_iou_t[i] = iou_max
         return max_prob_t, max_iou_t
 
 

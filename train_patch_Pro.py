@@ -25,10 +25,10 @@ np.random.seed(2233)
 
 
 class PatchTrainer(object):
-    def __init__(self, model):
+    def __init__(self):
         super(PatchTrainer, self).__init__()
         self.config = patch_configs['base']()  # load base config
-        self.model_ = model
+        self.model_ = FasterRCNN()
         self.log_path = None
         self.writer = self.init_tensorboard(name='base')
         self.patch_transformer = PatchTransformerPro().cuda()
@@ -52,7 +52,7 @@ class PatchTrainer(object):
         optimizer a adversarial patch
         """
         # load train datasets
-        datasets = ListDatasetAnn(self.config.deepfashion_txt, range_=[0, 800])
+        datasets = ListDatasetAnn(self.config.deepfashion_txt, range_=[0, 8])
         train_data = DataLoader(
             datasets,
             batch_size=self.config.batch_size,
@@ -61,7 +61,7 @@ class PatchTrainer(object):
         )
 
         test_data = DataLoader(
-            ListDatasetAnn(self.config.deepfashion_txt, range_=[800, 880]),
+            ListDatasetAnn(self.config.deepfashion_txt, range_=[800, 808]),
             num_workers=1,
             batch_size=self.config.batch_size
         )
@@ -108,8 +108,8 @@ class PatchTrainer(object):
                 tv = self.total_variation(adv_patch)
                 tv_loss = tv * 2
                 # calculate the entropy
-                I_max_prob = torch.log2(1 / (1 - max_prob))
-                det_loss = torch.mean(I_max_prob)
+                # I_max_prob = torch.log2(1 / (1 - max_prob))
+                det_loss = torch.sum(max_prob)
                 # calculate iou loss
                 iou_loss = torch.mean(max_iou_t)
                 # calculate cross entropy of union detector
