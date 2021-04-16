@@ -227,7 +227,11 @@ class UnionDetector(nn.Module):
                    (boxes[:, 2] - boxes[:, 0] + 1.) *
                    (boxes[:, 3] - boxes[:, 1] + 1.) - inters)
             overlaps = torch.max(inters / uni)
-            predict_image_id[i] = torch.tensor([overlaps, 1 - overlaps], device='cuda', dtype=torch.float)
+            overlaps = overlaps.unsqueeze(0)
+            overlaps = overlaps.expand((1, 2)).clone()
+            overlaps[:, 1] = 1 - overlaps[:, 1]
+            # overlaps[1] = 1 - overlaps[1]
+            predict_image_id[i] = overlaps
         attack_image_id = attack_image_id.type(torch.long)
         # use temperature parameter to make cross entropy loss converging more better
         predict_image_id = predict_image_id / 0.1
