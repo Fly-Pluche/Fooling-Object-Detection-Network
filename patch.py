@@ -222,8 +222,9 @@ class PatchApplierPro(nn.Module):
         masks = torch.unbind(adv_mask_batch, 1)
         # adv_batch [4, 15, 3, 416, 416]
         for adv, mask in zip(advs, masks):
-            img_batch = torch.where((mask > 0.1), adv, img_batch)
-        # plt.imshow(np.array(functional.to_pil_image(img_batch[0])))
+            mask = mask.type(torch.float32)
+            img_batch = torch.where(mask > 0.1, adv, img_batch)
+        # plt.imshow(np.asarray(functional.to_pil_image(img_batch[0])))
         # plt.show()
         return img_batch
 
@@ -420,6 +421,7 @@ class PatchTransformerPro(nn.Module):
         return array
 
     def forward(self, adv_patch, boxes_batch, segmentations_batch, points_batch, images_batch):
+        anchor_base = self.patch_config.anchor_base
         batch_size = torch.Size((boxes_batch.size(0), boxes_batch.size(1)))
         boxes_number = boxes_batch.size()[1]
 
@@ -479,7 +481,11 @@ class PatchTransformerPro(nn.Module):
         # calculate size
         # target_size = torch.stack([w1, w2], dim=2)
         # target_size = torch.max(target_size, dim=2).values  # [batch, boxes number] in
-        patch_scale = 1.3
+        # change patch_scale can control the size of our patch
+        if anchor_base:
+            patch_scale = 3
+        else:
+            patch_scale = 1.3
         target_size = torch.add(w1, w2) / 2.
         target_size = target_size * patch_scale
         # rotation patches to the right patch
@@ -577,10 +583,14 @@ class PatchTransformerPro(nn.Module):
         # Linear Burn
         # adv_batch_t[mask == 1] = adv_batch_t[mask == 1] + images_batch_gray[
         #     mask == 1] - 1
-
         useful_points = torch.sum(useful_points, dim=[2, 3])
         adv_batch_t[useful_points == 0] = 0
         adv_mask_batch_t[useful_points == 0] = 0
+        # test_adv = adv_mask_batch_t[0][0]
+        # test_adv = functional.to_pil_image(test_adv)
+        # test_adv = np.asarray(test_adv)
+        # plt.imshow(test_adv)
+        # plt.show()
         return adv_batch_t, adv_mask_batch_t
 
 
@@ -618,7 +628,7 @@ if __name__ == '__main__':
     # print(image.dt_tris)
     image_id = 3
     config = patch_configs['base']()
-    da = ListDatasetAnn(config.deepfashion_txt, 30)
+    da = ListDatasetAnn(config.deepfooling_txt, 30)
     loader = torch.utils.data.DataLoader(
         da,
         batch_size=config.batch_size,

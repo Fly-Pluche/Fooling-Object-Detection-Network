@@ -66,6 +66,20 @@ class MaxExtractor(nn.Module):
             batch_image: a batch of images [batch size, 3, width, height]
             people_boxes: a batch of boxes [batch size,lab number,4]
         """
+        union_image = torchvision.utils.make_grid(batch_image, padding=0)
+        # resize union image
+        theta = torch.tensor([
+            [1, 0, 0.],
+            [0, 1, 0.]
+        ], dtype=torch.float).cuda()
+        N, C, W, H = union_image.unsqueeze(0).size()
+        size = torch.Size((N, C, W // 4, H // 4))
+        grid = F.affine_grid(theta.unsqueeze(0), size)
+        output = F.grid_sample(union_image.unsqueeze(0), grid)
+        union_image = output[0]
+        # plt.imshow(np.array(functional.to_pil_image(union_image)))
+        # plt.show()
+        # union_image = functional.resize()
         images = torch.unbind(batch_image, 0)
         people_boxes = self.tools.xywh2xyxy_batch_torch(people_boxes, self.config.img_size)
         max_prob_t = torch.cuda.FloatTensor(batch_image.size(0)).fill_(0)
@@ -105,6 +119,9 @@ class MaxExtractor(nn.Module):
                 max_prob = torch.sqrt(max_prob)
                 max_prob_t[i] = max_prob
                 max_iou_t[i] = iou_max
+        union_detect = model(union_image)['instances']
+        labels = union_detect.pred_classes
+        max_prob_t = union_detect[labels == 0].scores
         return max_prob_t, max_iou_t
 
 
@@ -702,24 +719,32 @@ if __name__ == '__main__':
     warnings.filterwarnings("ignore")
     configs = patch_configs['base']()
     test_data = DataLoader(
-        ListDatasetAnn(configs.deepfashion_txt, range_=[800, 880]),
+        ListDatasetAnn(configs.deepfooling_txt, range_=[0, 160]),
         num_workers=1,
         batch_size=configs.batch_size
     )
     models = [FasterRCNN_R50_C4, FasterRCNN_R_50_DC5, FasterRCNN_R50_FPN, FasterRCNN_R_101_FPN, FasterRCNN, RetinaNet,
-              MaskRCNN]
-    images = ['R50_DC5.jpg', 'R50_FPN.jpg', 'R101_FPN.jpg', 'R50_C4.jpg']
+              MaskRcnnX152]
+    images = os.listdir('./new_patches')
+    re = open('result.txt', 'w')
     for image in images:
         print(image)
-        path = os.path.join('/home/corona/attack/Fooling-Object-Detection-Network/patches', image)
+        re.write('image: ' + str(image) + '\n')
+        path = os.path.join('/home/corona/attack/Fooling-Object-Detection-Network/new_patches', image)
         adv = Image.open(path)
+        adv = adv.resize((800, 800))
         adv = torchvision.transforms.functional.pil_to_tensor(adv) / 255.
+
         for item in models:
             model = item()
             patch_evaluator = PatchEvaluator(model, test_data)
             ap = patch_evaluator(adv, clean=False)
             print(ap)
+            re.write(str(ap) + '\n')
             del model, patch_evaluator
 
         print('=' * 50)
         print('=' * 50)
+        re.write('=' * 30)
+    re.close()
+

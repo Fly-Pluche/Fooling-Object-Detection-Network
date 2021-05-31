@@ -14,7 +14,7 @@ from torchvision import transforms
 from tqdm import tqdm
 
 from evaluator import MaxExtractor, TotalVariation, UnionDetector, MaxProbExtractor
-from evaluator import PatchEvaluator, PatchEvaluatorOld
+from evaluator import PatchEvaluator,PatchEvaluatorOld
 from load_data import ListDatasetAnn
 from models import *
 from patch import PatchTransformerPro, PatchApplierPro, PatchApplier, PatchTransformer
@@ -32,7 +32,6 @@ class PatchTrainer(object):
         super(PatchTrainer, self).__init__()
         self.config = patch_configs['base']()  # load base config
         self.model_ = FasterRCNN()
-        self.version = 'FasterRCNN_OLD'
         self.log_path = None
         self.writer = self.init_tensorboard(name='base')
         self.patch_transformer = PatchTransformer().cuda()
@@ -45,8 +44,8 @@ class PatchTrainer(object):
     def init_tensorboard(self, name=None):
         if name is not None:
             time_str = time.strftime("%Y%m%d-%H%M%S")
-            self.log_path = f'/home/ray/workspace/Keter/logs/{time_str}_{name}_{self.version}'
-            return SummaryWriter(f'/home/ray/workspace/Keter/logs/{time_str}_{name}_{self.version}')
+            self.log_path = f'/home/ray/workspace/Keter/logs/{time_str}_{name}'
+            return SummaryWriter(f'/home/ray/workspace/Keter/logs/{time_str}_{name}')
         else:
             return SummaryWriter()
 
@@ -55,7 +54,7 @@ class PatchTrainer(object):
         optimizer a adversarial patch
         """
         # load train datasets
-        datasets = ListDatasetAnn(self.config.deepfashion_txt, range_=[0, 800])
+        datasets = ListDatasetAnn(self.config.deepfooling_txt)
         train_data = DataLoader(
             datasets,
             batch_size=self.config.batch_size,
@@ -64,7 +63,7 @@ class PatchTrainer(object):
         )
 
         test_data = DataLoader(
-            ListDatasetAnn(self.config.deepfashion_txt, range_=[800, 880]),
+            ListDatasetAnn(self.config.deepfooling_txt, number=100),
             num_workers=1,
             batch_size=self.config.batch_size
         )
@@ -133,7 +132,6 @@ class PatchTrainer(object):
             with torch.no_grad():
                 adv = adv_patch_cpu.clone()
                 ap = self.patch_evaluator(adv, 0.5)  # ap50
-                print('AP: ', ap)
                 self.writer.add_scalar('ap', ap, epoch)
                 if float(ap) < min_ap:
                     name = os.path.join(self.log_path, str(float(ap) * 100) + '.jpg')

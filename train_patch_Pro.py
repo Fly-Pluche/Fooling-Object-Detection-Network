@@ -28,7 +28,9 @@ class PatchTrainer(object):
     def __init__(self):
         super(PatchTrainer, self).__init__()
         self.config = patch_configs['base']()  # load base config
-        self.model_ = FasterRCNN()
+        self.model_ = FasterRCNN_R_101_FPN()
+        self.name = 'Faster_RCNN_R101'
+        self.config.anchor_base = True
         self.log_path = None
         self.writer = self.init_tensorboard(name='base')
         self.patch_transformer = PatchTransformerPro().cuda()
@@ -42,8 +44,8 @@ class PatchTrainer(object):
     def init_tensorboard(self, name=None):
         if name is not None:
             time_str = time.strftime("%Y%m%d-%H%M%S")
-            self.log_path = f'/home/ray/workspace/Keter/logs/{time_str}_{name}'
-            return SummaryWriter(f'/home/ray/workspace/Keter/logs/{time_str}_{name}')
+            self.log_path = f'/home/ma-user/work/logs/{time_str}_{name}_{self.name}'
+            return SummaryWriter(f'/home/ma-user/work/logs/{time_str}_{name}_{self.name}')
         else:
             return SummaryWriter()
 
@@ -52,7 +54,7 @@ class PatchTrainer(object):
         optimizer a adversarial patch
         """
         # load train datasets
-        datasets = ListDatasetAnn(self.config.deepfashion_txt, range_=[0, 8])
+        datasets = ListDatasetAnn(self.config.deepfooling_txt, range_=[160, 1760])
         train_data = DataLoader(
             datasets,
             batch_size=self.config.batch_size,
@@ -61,7 +63,7 @@ class PatchTrainer(object):
         )
 
         test_data = DataLoader(
-            ListDatasetAnn(self.config.deepfashion_txt, range_=[800, 808]),
+            ListDatasetAnn(self.config.deepfooling_txt, range_=[0, 160]),
             num_workers=1,
             batch_size=self.config.batch_size
         )
@@ -108,11 +110,19 @@ class PatchTrainer(object):
                 tv = self.total_variation(adv_patch)
                 tv_loss = tv * 2
                 # calculate the entropy
-                # I_max_prob = torch.log2(1 / (1 - max_prob))
+                #                 I_max_prob = torch.log2(1 / (1 - max_prob))
+                print(max_prob)
                 det_loss = torch.sum(max_prob)
+                det_loss = det_loss
                 # calculate iou loss
-                iou_loss = torch.mean(max_iou_t)
+                iou_loss = torch.sum(max_iou_t)
                 # calculate cross entropy of union detector
+                print(det_loss)
+                print(iou_loss)
+                print(union_iou_loss)
+                #                 loss = det_loss + torch.max(tv_loss, torch.tensor(0.1).cuda()) + iou_loss + union_iou_loss
+                #                 loss = det_loss + torch.max(tv_loss, torch.tensor(0.1).cuda()) +
+                #                 loss = det_loss
                 loss = det_loss + torch.max(tv_loss, torch.tensor(0.1).cuda()) + iou_loss + union_iou_loss
                 # evaluate
                 ep_det_loss += det_loss.detach().cpu().numpy()
@@ -126,7 +136,7 @@ class PatchTrainer(object):
                 optimizer.zero_grad()
                 adv_patch_cpu.data.clamp_(0, 1)  # keep patch in image range
 
-                if i_batch % 5 == 0:
+                if i_batch % 23 == 0:
                     iteration = epoch_length * epoch + i_batch
                     self.writer.add_scalar('total_loss', loss.detach().cpu().numpy(), iteration)
                     self.writer.add_scalar('loss/det_loss', det_loss.detach().cpu().numpy(), iteration)

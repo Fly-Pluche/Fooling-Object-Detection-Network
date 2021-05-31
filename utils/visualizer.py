@@ -46,6 +46,7 @@ class Visualizer_(Visualizer):
 
         corona: rewrite this function in detectron2. This function will only draw boxes on the image
         """
+
         boxes = predictions.pred_boxes if predictions.has("pred_boxes") else None
         scores = predictions.scores if predictions.has("scores") else None
         classes = predictions.pred_classes if predictions.has("pred_classes") else None

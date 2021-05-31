@@ -42,12 +42,12 @@ def predict_one_video(model, video_path, output_path, threshold=0.5):
     _, first_image = video.read()
     video_width, video_height = first_image.shape[1], first_image.shape[0]
 
-    video_writer = cv2.VideoWriter(output_path, fourcc, fps, (int(video_width * 0.6), int(video_height * 0.6)))
+    video_writer = cv2.VideoWriter(output_path, fourcc, fps, (int(video_width * 0.4), int(video_height * 0.4)))
     for i in tqdm(range(total_frames - 1)):
         _, frame = video.read()
         # BGR to RGB
         frame = frame[..., ::-1]
-        frame = cv2.resize(frame, (int(video_width * 0.6), int(video_height * 0.6)))
+        frame = cv2.resize(frame, (int(video_width * 0.4), int(video_height * 0.4)))
         result = predict_one_image(model, frame, threshold)
         video_writer.write(result[..., ::-1])
     video_writer.release()
@@ -56,12 +56,11 @@ def predict_one_video(model, video_path, output_path, threshold=0.5):
 def get_data_loader():
     # load datasets
     config = patch_configs['base']()
-    datasets = ListDatasetAnn(config.deepfashion_txt)
+    datasets = ListDatasetAnn(config.deepfooling_txt, range_=[0, 160])
     data_loader = DataLoader(
         datasets,
         batch_size=1,
         num_workers=1,
-        shuffle=True,
     )
     return data_loader
 
@@ -93,8 +92,6 @@ def generate_attacked_results(adv_patch_cpu, config, data_loader, model):
     for image_batch, clothes_boxes_batch, people_boxes_batch, labels_batch, landmarks_batch, segmentations_batch in tqdm(
             data_loader):
         image_batch = image_batch.cuda()
-        labels_batch = labels_batch.cuda()
-        people_boxes_batch = people_boxes_batch.cuda()
         adv_batch_t, adv_batch_mask_t = patch_transformer(adv_patch,
                                                           clothes_boxes_batch,
                                                           segmentations_batch,
@@ -110,16 +107,16 @@ def generate_attacked_results(adv_patch_cpu, config, data_loader, model):
         with torch.no_grad():
             p_img_output = model(p_img)
             img_output = model(img)
-        # p_scores = p_img_output['instances'].scores
-        # scores = img_output['instances'].scores
-        # p_labels = p_img_output['instances'].pred_classes
-        # labels = p_img_output['instances'].pred_classes
+            # p_scores = p_img_output['instances'].scores
+            # scores = img_output['instances'].scores
+            # p_labels = p_img_output['instances'].pred_classes
+            # labels = p_img_output['instances'].pred_classes
 
-        p_img = model.visual_instance_predictions(p_img, p_img_output)
-        img = model.visual_instance_predictions(img, img_output)
+            p_img = model.visual_instance_predictions(p_img, p_img_output, threshold=0.8)
+            img = model.visual_instance_predictions(img, img_output, threshold=0.8)
 
-        cv2.imwrite('outputs/' + str(i) + '_0.jpg', p_img[:, :, ::-1])
-        cv2.imwrite('outputs/' + str(i) + '_1.jpg', img[:, :, ::-1])
+        cv2.imwrite('./outputs_new/' + str(i) + '_0.jpg', p_img[:, :, ::-1])
+        cv2.imwrite('./outputs_new/' + str(i) + '_1.jpg', img[:, :, ::-1])
         i += 1
         # plt.imshow(p_img)
         # # plt.imshow(np.array(functional.to_pil_image(p_img)))
@@ -127,12 +124,16 @@ def generate_attacked_results(adv_patch_cpu, config, data_loader, model):
 
 
 if __name__ == '__main__':
-    model = FasterRCNN()
+    model = FasterRCNN_R50_C4()
+    # img = cv2.imread('images/a.jpg')
+    # out = model.default_predictor(img)
+    # img_ = model.visual_instance_predictions(img[:, :, ::-1], out, mode='other')
+    # cv2.imwrite('images/a_.jpg', img_[:, :, ::-1])
     data_loader = get_data_loader()
     config = patch_configs['base']()
-    adv_patch_cpu = generate_patch(config, load_from_file='patches/retinanet.jpg')
+    adv_patch_cpu = generate_patch(config, load_from_file='new_patches/big5.jpg')
     generate_attacked_results(adv_patch_cpu, config, data_loader, model)
-    # predict_one_video(model, 'vedios/VID_20210408_081759.mp4', 'vedios/output.mp4')
+    # predict_one_video(model, 'vedios/test.mp4', 'vedios/output.mp4')
     # image = np.array(Image.open('images/IMG_20210407_114942.jpg').resize((1066, 800)))
     # print(image.shape)
     # # image = np.resize(image, (300, 400, 3))

@@ -242,7 +242,7 @@ def load_test_data_loader(txt, number=10):
 
 if __name__ == '__main__':
     config = patch_configs['base']()
-    da = ListDatasetAnn(config.deepfashion_txt, 10)
+    da = ListDatasetAnn(config.deepfooling_txt, 10)
     da = iter(da)
     next(da)
     next(da)

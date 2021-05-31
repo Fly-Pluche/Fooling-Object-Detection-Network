@@ -13,7 +13,6 @@ from torch import nn
 from utils.img_tools import ImageTools
 from predict import Predictor
 from utils.visualizer import Visualizer_
-import mmcv
 
 
 # import os

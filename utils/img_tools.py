@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from .parse_annotations import ParseTools
 import numpy as np
 import random
-from skimage import transform as stf
+# from skimage import transform as stf
 import random
 
 
