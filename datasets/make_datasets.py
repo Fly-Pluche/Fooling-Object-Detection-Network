@@ -25,7 +25,7 @@ for ann, image in tqdm(zip(annos, images)):
     f.close()
     if ann_.get('people_boxes') is None:
         im = np.asarray(Image.open(image))
-        outputs = model.default_predictor(im)
+        outputs = model.default_predictor_(im)
         image = model.visual_instance_predictions(im, outputs, 'rgb')
         cv2.imwrite('/home/corona/attack/Fooling-Object-Detection-Network/predict_images/' + str(i) + '.jpg', image)
         print('write')

@@ -482,7 +482,7 @@ class PatchTransformerPro(nn.Module):
         # target_size = torch.stack([w1, w2], dim=2)
         # target_size = torch.max(target_size, dim=2).values  # [batch, boxes number] in
         # change patch_scale can control the size of our patch
-        if anchor_base:
+        if anchor_base is True:
             patch_scale = 3
         else:
             patch_scale = 1.3

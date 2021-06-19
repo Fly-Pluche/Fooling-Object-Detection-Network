@@ -21,7 +21,7 @@ def predict_one_image(model, image, threshold=0.8):
         image: a rgb np array
         threshold: boxes under this value will not be shown in the result.
     """
-    output = model.default_predictor(image)
+    output = model.default_predictor_(image)
     result = model.visual_instance_predictions(image, output, mode='pil', threshold=threshold)
     return result
 
@@ -131,7 +131,8 @@ if __name__ == '__main__':
     # cv2.imwrite('images/a_.jpg', img_[:, :, ::-1])
     data_loader = get_data_loader()
     config = patch_configs['base']()
-    adv_patch_cpu = generate_patch(config, load_from_file='new_patches/big5.jpg')
+    config.anchor_base = False
+    adv_patch_cpu = generate_patch(config, load_from_file='./new_patches/fa_new.jpg')
     generate_attacked_results(adv_patch_cpu, config, data_loader, model)
     # predict_one_video(model, 'vedios/test.mp4', 'vedios/output.mp4')
     # image = np.array(Image.open('images/IMG_20210407_114942.jpg').resize((1066, 800)))

@@ -1,0 +1,9 @@
+./test_code
+*.mp4
+./vedios
+./logs
+weights
+*.weights
+*.pt
+coco
+

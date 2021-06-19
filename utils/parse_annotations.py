@@ -13,6 +13,7 @@ class ParseTools:
     def __init__(self):
         pass
 
+
     # parse boxes and labels information from one image's annotation file
     # size: [width, height]
     def parse_boxes_labels(self, size, ann_path,
@@ -254,6 +255,10 @@ class ParseTools:
             if np.sum(polygon) != 0:
                 masks.append(self.polygon2mask(img_size, polygon))
         return masks
+
+
+
+
 
 
 if __name__ == '__main__':
