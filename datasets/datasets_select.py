@@ -26,7 +26,7 @@ class DatasetsSelecter:
             self.needed = f.read()
         self.name = ''
 
-    # create a screen and set the size of it
+    # create a.json screen and set the size of it
     def __init_screen(self):
         # set the size of the screen
         size = self.width, self.height

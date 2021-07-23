@@ -1,33 +1,28 @@
 # Check Pytorch installation
-import torch, torchvision
 
-# Check MMDetection installation
-import mmdet
-from mmdet.apis import inference_detector, init_detector, show_result_pyplot
-from mmdet.apis import *
 # Check mmcv installation
 from mmcv.ops import get_compiling_cuda_version, get_compiler_version
-import numpy as np
+from mmdet.apis import *
+# Check MMDetection installation
+from mmdet.apis import init_detector, show_result_pyplot
+
 print(get_compiling_cuda_version())
 print(get_compiler_version())
-import mmcv
 import numpy as np
-import torch
 from mmcv.ops import RoIPool
 from mmcv.parallel import collate, scatter
-from mmcv.runner import load_checkpoint
 
-from mmdet.core import get_classes
 from mmdet.datasets import replace_ImageToTensor
 from mmdet.datasets.pipelines import Compose
-from mmdet.models import build_detector
-# Choose to use a config and initialize the detector
+
+# Choose to use a.json config and initialize the detector
 config = '/home/corona/attack/Fooling-Object-Detection-Network/configs/mask_rcnn/mask_rcnn_r50_caffe_fpn_mstrain-poly_3x_coco.py'
-# Setup a checkpoint file to load
+# Setup a.json checkpoint file to load
 checkpoint = '/home/corona/attack/Fooling-Object-Detection-Network/checkpoints/mask_rcnn_r50_caffe_fpn_mstrain-poly_3x_coco_bbox_mAP-0.408__segm_mAP-0.37_20200504_163245-42aa3d00.pth'
 # initialize the detector
 model = init_detector(config, checkpoint, device='cuda:0')
 img = '/home/ray/data/deepfashion2/train/image/059044.jpg'
+
 
 def inference_detector2(model, imgs):
     """Inference image(s) with the detector.
@@ -38,7 +33,7 @@ def inference_detector2(model, imgs):
            Either image files or loaded images.
 
     Returns:
-        If imgs is a list or tuple, the same length list type results
+        If imgs is a.json list or tuple, the same length list type results
         will be returned, otherwise return the detection results directly.
     """
 
@@ -92,6 +87,7 @@ def inference_detector2(model, imgs):
         return results[0]
     else:
         return results
+
 
 result = inference_detector2(model, img)
 

@@ -198,7 +198,7 @@ def _draw_and_save_output_image(image_path, detections, img_size, output_path, c
         box_h = y2 - y1
 
         color = bbox_colors[int(np.where(unique_labels == int(cls_pred))[0])]
-        # Create a Rectangle patch
+        # Create a.json Rectangle patch
         bbox = patches.Rectangle((x1, y1), box_w, box_h, linewidth=2, edgecolor=color, facecolor="none")
         # Add the bbox to the plot
         ax.add_patch(bbox)
@@ -223,7 +223,7 @@ def _draw_and_save_output_image(image_path, detections, img_size, output_path, c
 
 
 def _create_data_loader(img_path, batch_size, img_size, n_cpu):
-    """Creates a DataLoader for inferencing.
+    """Creates a.json DataLoader for inferencing.
 
     :param img_path: Path to file containing all paths to validation images.
     :type img_path: str

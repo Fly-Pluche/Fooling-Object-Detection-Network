@@ -3,7 +3,9 @@ from __future__ import absolute_import
 from train_patch_Pro import *
 from models import *
 import os
+import warnings
 
+warnings.filterwarnings('ignore')
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 # os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
@@ -13,7 +15,7 @@ if __name__ == '__main__':
         import sys
         from os import path
 
-        sys.path.append('/home/corona/attack/Fooling-Object-Detection-Network')
+        # sys.path.append('/home/corona/attack/Fooling-Object-Detection-Network')
 
     trainer = PatchTrainer()
     trainer.train()

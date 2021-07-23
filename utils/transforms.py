@@ -19,7 +19,17 @@ class TensorToNumpy(nn.Module):
         return image_rgb
 
 
+def CMYK2RGB(img):
+    """
+    transform CMYK img to RGB img
+    """
 
+    img_rgb = torch.cuda.FloatTensor(3, img.size(1), img.size(2))
+    img_rgb[0] = (1 - img[0]) * (1 - img[3])
+    img_rgb[1] = (1 - img[1]) * (1 - img[3])
+    img_rgb[2] = (1 - img[2]) * (1 - img[3])
+    print(img_rgb)
+    return img_rgb
 
 
 if __name__ == '__main__':

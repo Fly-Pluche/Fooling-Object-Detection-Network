@@ -17,14 +17,14 @@ class BaseConfig(object):
         self.txt_path = '/home/corona/datasets/WiderPerson/train/train2.txt'
         self.save_adv_patch_path = '/home/corona/attack/Fooling-Object-Detection-Network/patches'
         self.deepfooling_txt = '/home/corona/deepfooling/train.txt'
-        self.patch_size = 520
+        self.patch_size = 500
         self.root_path = '/home/corona/deepfooling'
         self.start_learning_rate = 0.007
         self.patch_name = 'base'
         self.scheduler_factory = lambda x: optim.lr_scheduler.ReduceLROnPlateau(x, 'min', patience=50)
         self.batch_size = 4
         # width height
-        self.img_size = (1300, 1300)
+        self.img_size = (1000, 1000)
         self.img_size_big = self.img_size
         # anchor base
         self.anchor_base = True

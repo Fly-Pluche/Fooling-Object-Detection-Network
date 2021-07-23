@@ -6,11 +6,11 @@
 # import torch.nn as nn
 
 # with open('/home/ray/data/deepfashion2/train/train.txt', 'r') as f:
-#     a = f.readlines()
+#     a.json = f.readlines()
 #
 # import os
 # from tqdm import tqdm
-# for item in tqdm(a):
+# for item in tqdm(a.json):
 #     file_path = os.path.join('/home/ray/data/deepfashion2/train/annos', item.strip())
 #     b = os.path.join('/home/ray/data/deepfooling/annos', item.strip())
 #     os.system('sudo cp %s %s' % (file_path, b))
@@ -101,21 +101,21 @@ return masks_batch
 
 # import cv2
 #
-# a = cv2.imread('images/1.jpg')
+# a.json = cv2.imread('images/1.jpg')
 # b = cv2.imread('images/2.jpg')
 # c = cv2.imread('images/3.jpg')
 #
-# a = cv2.cvtColor(a, cv2.COLOR_BGR2RGB)
+# a.json = cv2.cvtColor(a.json, cv2.COLOR_BGR2RGB)
 # b = cv2.cvtColor(b, cv2.COLOR_BGR2RGB)
 # c = cv2.cvtColor(c, cv2.COLOR_BGR2RGB)
 #
-# cv2.imwrite('images/1.jpg', a)
+# cv2.imwrite('images/1.jpg', a.json)
 # cv2.imwrite('images/2.jpg', b)
 # cv2.imwrite('images/3.jpg', c)
 
 # import cv2
-# a = cv2.imread('/home/corona/attack/Fooling-Object-Detection-Network/patches/MaskRCNN.jpg')
-# print(a.shape)
+# a.json = cv2.imread('/home/corona/attack/Fooling-Object-Detection-Network/patches/MaskRCNN.jpg')
+# print(a.json.shape)
 
 
 

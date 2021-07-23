@@ -43,7 +43,7 @@ class PatchTrainer(object):
 
     def train(self):
         """
-        optimizer a adversarial patch
+        optimizer a.json adversarial patch
         """
         # load train datasets
         datasets = ListDataset(self.config.txt_path)
@@ -55,7 +55,7 @@ class PatchTrainer(object):
         )
 
         epoch_length = len(train_data)
-        # generate a gray patch
+        # generate a.json gray patch
         adv_gauss_cpu = self.generate_gauss()
         adv_gauss_cpu.requires_grad_(True)
 
@@ -63,7 +63,7 @@ class PatchTrainer(object):
         optimizer = torch.optim.Adam([adv_gauss_cpu], lr=self.config.start_learning_rate)
         scheduler = self.config.scheduler_factory(optimizer)  # used to update learning rate
 
-        # create a evaluator for adv patch
+        # create a.json evaluator for adv patch
         attack_evaluator = PatchEvaluator(self.model_, train_data)
 
         for epoch in range(1000):

@@ -50,7 +50,7 @@ class BaseModel(nn.Module):
     def default_predictor(self, img):
         """
         use detectron2 default predictor to predict
-        img: a image read by cv2 or PIL
+        img: a.json image read by cv2 or PIL
         """
         return self.default_predictor_(img)
 
@@ -71,11 +71,11 @@ class BaseModel(nn.Module):
         :param train_datasets_name: the datasets' name you have registered
         :param num_workers: the cpu number you want to choose
         :param img_per_batch:
-        :param base_lr: pick a good learning rate
+        :param base_lr: pick a.json good learning rate
         :param max_iter: max train iterations
         :param batch_size_per_image: batch size of the train data
         :param num_classes: total number classes in your datasets
-        :return: a detectron2 DefaultTrainer. you can use trainer.train() to train the model
+        :return: a.json detectron2 DefaultTrainer. you can use trainer.train() to train the model
         """
         self.cfg.DATASETS.TRAIN = (train_datasets_name,)
         self.cfg.DATASETS.TEST = ()
@@ -98,6 +98,11 @@ class MaskRCNN(BaseModel):
     def __init__(self):
         model = "COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml"
         super(MaskRCNN, self).__init__(model)
+
+class MaskRCNN_PRO(BaseModel):
+    def __init__(self):
+        model = "Misc/cascade_mask_rcnn_X_152_32x8d_FPN_IN5k_gn_dconv.yaml"
+        super(MaskRCNN_PRO, self).__init__(model)
 
 
 # faster rcnn x101-FPN
@@ -209,7 +214,7 @@ class Yolov3(BaseModel):
     def default_predictor(self, img):
         """
         directly predict cv2/PIL image
-        img: a image read by cv2 or PIL
+        img: a.json image read by cv2 or PIL
         """
         if type(img) == PIL.JpegImagePlugin.JpegImageFile:
             img = functional.pil_to_tensor(img) / 255.0
@@ -240,7 +245,7 @@ if __name__ == '__main__':
     # FasterRCNN_R50_FPN()
     # FasterRCNN_R_101_FPN()
     # faster = FasterRCNN()
-    # a = RetinaNet()
+    # a.json = RetinaNet()
     # b = FastRCNN()
     # c = MaskRCNN()
     # d = FasterRCNNVOC()

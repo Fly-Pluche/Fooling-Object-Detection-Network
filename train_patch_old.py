@@ -51,7 +51,7 @@ class PatchTrainer(object):
 
     def train(self):
         """
-        optimizer a adversarial patch
+        optimizer a.json adversarial patch
         """
         # load train datasets
         datasets = ListDatasetAnn(self.config.deepfooling_txt)
@@ -71,7 +71,7 @@ class PatchTrainer(object):
         self.patch_evaluator = PatchEvaluatorOld(self.model_, test_data)
 
         epoch_length = len(train_data)
-        # generate a gray patch
+        # generate a.json gray patch
         adv_patch_cpu = self.generate_patch(
             load_from_file='/home/corona/attack/Fooling-Object-Detection-Network/images/random_patch.jpg')
         adv_patch_cpu.requires_grad_(True)
@@ -155,7 +155,7 @@ class PatchTrainer(object):
             torch.cuda.empty_cache()
 
     def generate_patch(self, load_from_file=None, is_random=False):
-        # load a image from local patch
+        # load a.json image from local patch
         if load_from_file is not None:
             patch = Image.open(load_from_file)
             patch = patch.resize((self.config.patch_size, self.config.patch_size))

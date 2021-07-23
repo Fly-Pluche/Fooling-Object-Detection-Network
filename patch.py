@@ -1,6 +1,5 @@
 from __future__ import absolute_import
 
-import cv2
 import math
 
 import matplotlib
@@ -8,18 +7,17 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.nn.functional as F
-import torchvision
 from PIL import Image
 from torch import nn
 from torch.nn.modules.utils import _pair, _quadruple
-from torchvision.transforms import functional
 from torchvision.transforms import GaussianBlur
+from torchvision.transforms import functional
+
 from load_data import ListDatasetAnn
 from patch_config import patch_configs
-from utils.delaunay2D import Delaunay2D
+# from utils.delaunay2D import Delaunay2D
 from utils.parse_annotations import ParseTools
-
-import os
+from utils.utils import imshow
 
 
 # os.environ["CUDA_VISIBLE_DEVICES"] = "1"
@@ -160,6 +158,7 @@ class PatchTransformer(nn.Module):
         off_y = target_off_y * (torch.cuda.FloatTensor(target_off_y.size()).uniform_(-0.1, 0.1))
         target_y = target_y + off_y
         target_y = target_y - 0.01
+        target_size = target_size * 0.8
         scale = target_size / current_patch_size
         scale = scale.view(angle_size)
 
@@ -223,7 +222,8 @@ class PatchApplierPro(nn.Module):
         # adv_batch [4, 15, 3, 416, 416]
         for adv, mask in zip(advs, masks):
             mask = mask.type(torch.float32)
-            img_batch = torch.where(mask > 0.1, adv, img_batch)
+            img_batch = torch.where(mask > 0.00001, adv, img_batch)
+
         # plt.imshow(np.asarray(functional.to_pil_image(img_batch[0])))
         # plt.show()
         return img_batch
@@ -322,79 +322,79 @@ class PatchGauss(nn.Module):
         return adv_patch[0]
 
 
-class PatchDelaunay2D:
-    """
-    create Delaunay2D triangles for patch.
-    """
-
-    def __init__(self):
-        self.patch_config = patch_configs['base']()
-        self.dt = Delaunay2D()
-        self.seeds_num = 0
-        self.seeds, self.dt_tris = self.create_patch_delaunay()
-
-        # self.seeds = self.seeds / self.patch_config.patch_size
-
-    def create_patch_delaunay(self):
-        """
-        use delaunay to create triangles,
-        return:
-            seeds: the [x,y] of points, type: float 0-1
-            tris: triangles' points
-        """
-        radius = self.patch_config.patch_size
-        seeds = []
-        num = 4
-        self.seeds_num = (num + 1) ** 2
-        for i in range(0, num + 1):
-            x = i * self.patch_config.patch_size / num
-            for j in range(0, num + 1):
-                y = j * self.patch_config.patch_size / num
-                seeds.append([x, y])
-        seeds = np.array(seeds, dtype=np.float)
-        center = np.mean(seeds, axis=0)
-        self.dt = Delaunay2D(center, 50 * radius)
-
-        # Insert all seeds one by one
-        for s in seeds:
-            self.dt.addPoint(s)
-
-        dt_tris = np.array(self.dt.exportTriangles())
-        return seeds, dt_tris
-
-    def visual(self):
-        # Create a plot with matplotlib.pyplot
-        fig, ax = plt.subplots()
-        ax.margins(0.1)
-        ax.set_aspect('equal')
-        plt.axis([-1, self.patch_config.patch_size + 1, -1, self.patch_config.patch_size + 1])
-        # Plot our Delaunay triangulation (plot in blue)
-        cx, cy = zip(*self.seeds)
-        ax.triplot(matplotlib.tri.Triangulation(cx, cy, self.dt_tris), 'bo--')
-        ax.axes.xaxis.set_visible(False)
-        ax.axes.yaxis.set_visible(False)
-        plt.show()
-
-    def write_to_obj(self, file_path):
-        vertices_num = len(self.seeds)
-        faces_num = len(self.dt_tris)
-        seeds = self.seeds / self.patch_config.patch_size
-        obj = ''
-        obj += '#vertices: %d\n' % vertices_num
-        obj += '#faces: %d\n' % faces_num
-        for seed in seeds:
-            obj += 'v '
-            obj += str(seed[0]) + ' '
-            obj += str(seed[1])
-            obj += '\n'
-        for tri in self.dt_tris:
-            obj += 'f '
-            obj += str(tri[0]) + ' '
-            obj += str(tri[1]) + ' '
-            obj += str(tri[2])
-            obj += '\n'
-        with open(file_path, 'w') as f:
-            f.write(obj)
+# class PatchDelaunay2D:
+#     """
+#     create Delaunay2D triangles for patch.
+#     """
+#
+#     def __init__(self):
+#         self.patch_config = patch_configs['base']()
+#         self.dt = Delaunay2D()
+#         self.seeds_num = 0
+#         self.seeds, self.dt_tris = self.create_patch_delaunay()
+#
+#         # self.seeds = self.seeds / self.patch_config.patch_size
+#
+#     def create_patch_delaunay(self):
+#         """
+#         use delaunay to create triangles,
+#         return:
+#             seeds: the [x,y] of points, type: float 0-1
+#             tris: triangles' points
+#         """
+#         radius = self.patch_config.patch_size
+#         seeds = []
+#         num = 4
+#         self.seeds_num = (num + 1) ** 2
+#         for i in range(0, num + 1):
+#             x = i * self.patch_config.patch_size / num
+#             for j in range(0, num + 1):
+#                 y = j * self.patch_config.patch_size / num
+#                 seeds.append([x, y])
+#         seeds = np.array(seeds, dtype=np.float)
+#         center = np.mean(seeds, axis=0)
+#         self.dt = Delaunay2D(center, 50 * radius)
+#
+#         # Insert all seeds one by one
+#         for s in seeds:
+#             self.dt.addPoint(s)
+#
+#         dt_tris = np.array(self.dt.exportTriangles())
+#         return seeds, dt_tris
+#
+#     def visual(self):
+#         # Create a plot with matplotlib.pyplot
+#         fig, ax = plt.subplots()
+#         ax.margins(0.1)
+#         ax.set_aspect('equal')
+#         plt.axis([-1, self.patch_config.patch_size + 1, -1, self.patch_config.patch_size + 1])
+#         # Plot our Delaunay triangulation (plot in blue)
+#         cx, cy = zip(*self.seeds)
+#         ax.triplot(matplotlib.tri.Triangulation(cx, cy, self.dt_tris), 'bo--')
+#         ax.axes.xaxis.set_visible(False)
+#         ax.axes.yaxis.set_visible(False)
+#         plt.show()
+#
+#     def write_to_obj(self, file_path):
+#         vertices_num = len(self.seeds)
+#         faces_num = len(self.dt_tris)
+#         seeds = self.seeds / self.patch_config.patch_size
+#         obj = ''
+#         obj += '#vertices: %d\n' % vertices_num
+#         obj += '#faces: %d\n' % faces_num
+#         for seed in seeds:
+#             obj += 'v '
+#             obj += str(seed[0]) + ' '
+#             obj += str(seed[1])
+#             obj += '\n'
+#         for tri in self.dt_tris:
+#             obj += 'f '
+#             obj += str(tri[0]) + ' '
+#             obj += str(tri[1]) + ' '
+#             obj += str(tri[2])
+#             obj += '\n'
+#         with open(file_path, 'w') as f:
+#             f.write(obj)
 
 
 class PatchTransformerPro(nn.Module):
@@ -404,7 +404,6 @@ class PatchTransformerPro(nn.Module):
         """
         super(PatchTransformerPro, self).__init__()
         self.patch_config = patch_configs['base']()
-        self.patch_delaunay2d = PatchDelaunay2D()
         self.needed_points = [11, 12, 13, 14, 15, 16, 17, 18, 19]
         self.gaussian_blur = GaussianBlur(3, 1)
         self.min_contrast = 0.8  # min contrast
@@ -413,15 +412,14 @@ class PatchTransformerPro(nn.Module):
         self.max_brightness = 0.1  # max brightness
         self.noise_factor = 0.10  # a limit to noise
 
-    def numpy_expand(self, array):
-        array = torch.from_numpy(array)
-        array = array.unsqueeze(-1)
-        array = array.unsqueeze(-1)
-        array = array.expand((-1, -1, self.patch_delaunay2d.seeds_num, 2)).clone().numpy()
-        return array
+    # def numpy_expand(self, array):
+    #     array = torch.from_numpy(array)
+    #     array = array.unsqueeze(-1)
+    #     array = array.unsqueeze(-1)
+    #     array = array.expand((-1, -1, self.patch_delaunay2d.seeds_num, 2)).clone().numpy()
+    #     return array
 
     def forward(self, adv_patch, boxes_batch, segmentations_batch, points_batch, images_batch):
-        anchor_base = self.patch_config.anchor_base
         batch_size = torch.Size((boxes_batch.size(0), boxes_batch.size(1)))
         boxes_number = boxes_batch.size()[1]
 
@@ -451,10 +449,8 @@ class PatchTransformerPro(nn.Module):
 
         # apply contrast, brightness and clamp
         adv_batch = adv_batch * contrast + brightness + noise
-        adv_batch = torch.clamp(adv_batch, 0.000001, 0.999999)
+        adv_batch = torch.clamp(adv_batch, 0, 1)
 
-        # plt.imshow(np.array(functional.to_pil_image(adv_batch[0, 0])))
-        # plt.show()
         # create adv patches' masks
         adv_mask_batch_t = torch.ones_like(adv_batch).cuda()
         img_size = torch.tensor(self.patch_config.img_size_big)
@@ -472,7 +468,6 @@ class PatchTransformerPro(nn.Module):
                      useful_points[:, :, 5, :] + useful_points[:, :, 7, :]) / 4
         target_x = xy_center[:, :, 0].view(np.prod(batch_size))  # [4,2] -> [8]
         target_y = xy_center[:, :, 1].view(np.prod(batch_size))  # [4,2] -> [8]
-
         # calculate each box's width
         w1 = 0.9 * (useful_points[:, :, 7, 0] + useful_points[:, :, 5, 0]) / 2 - 0.9 * (
                 useful_points[:, :, 2, 0] + useful_points[:, :, 3, 0]) / 2
@@ -482,11 +477,8 @@ class PatchTransformerPro(nn.Module):
         # target_size = torch.stack([w1, w2], dim=2)
         # target_size = torch.max(target_size, dim=2).values  # [batch, boxes number] in
         # change patch_scale can control the size of our patch
-        if anchor_base is True:
-            patch_scale = 3
-        else:
-            patch_scale = 1.3
-        target_size = torch.add(w1, w2) / 2.
+        patch_scale = 0.7
+        target_size = torch.max(w1, w2)
         target_size = target_size * patch_scale
         # rotation patches to the right patch
         #  x15-x13   x17-x19     1
@@ -503,7 +495,6 @@ class PatchTransformerPro(nn.Module):
 
         scale = target_size / current_patch_size
         scale = scale.view(angle_size)
-
         s = adv_batch.size()
         adv_batch = adv_batch.view(s[0] * s[1], s[2], s[3], s[4])
         adv_mask_batch_t = adv_mask_batch_t.view(s[0] * s[1], s[2], s[3], s[4])
@@ -532,6 +523,7 @@ class PatchTransformerPro(nn.Module):
         adv_mask_batch = adv_mask_batch_t.clone()
         adv_mask_batch = adv_mask_batch[:, :, 0, :, :]
 
+        # imshow(adv_batch_t[0][0])
         # turn rgb images to gray images
         images_batch_gray = images_batch.clone()
         images_batch_max = torch.max(images_batch_gray, dim=-3).values
@@ -578,13 +570,14 @@ class PatchTransformerPro(nn.Module):
         # color_sum = color_sum * adv_mask_batch_t
         # color_sum = color_sum.view(s[0], s[1], s[-1] * s[-2] * s[-3])
         # color_sum = torch.sum(color_sum, dim=2)
-        # mask = adv_mask_batch_t.clone()
+        mask = adv_mask_batch_t.clone()
         # mask[color_sum <= 65000] += 1
         # Linear Burn
         # adv_batch_t[mask == 1] = adv_batch_t[mask == 1] + images_batch_gray[
         #     mask == 1] - 1
         useful_points = torch.sum(useful_points, dim=[2, 3])
         adv_batch_t[useful_points == 0] = 0
+        #
         adv_mask_batch_t[useful_points == 0] = 0
         # test_adv = adv_mask_batch_t[0][0]
         # test_adv = functional.to_pil_image(test_adv)

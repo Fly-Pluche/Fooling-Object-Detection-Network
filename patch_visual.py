@@ -42,7 +42,7 @@ class PatchVisual(nn.Module):
         adv_patch = Image.open(patch_path)
         adv_patch = functional.pil_to_tensor(adv_patch).cuda()
         adv_patch = adv_patch / 255.
-        # load a image information
+        # load a.json image information
         image, boxes, label = data
         image = image.cuda()
         boxes = boxes.cuda()

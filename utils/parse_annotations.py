@@ -161,17 +161,17 @@ class ParseTools:
             anno_path: the path of the anno file
             image_type: choose the image type of the dataset
             mode: you can this to change the reading mode. (numpy rgb,PIL rgb,cv2 bgr)
-            need_classes: a list  You can choose the classes and parse its information.
-        category_id: a number which corresponds to the category name.
+            need_classes: a.json list  You can choose the classes and parse its information.
+        category_id: a.json number which corresponds to the category name.
                     In category_id, 1 represents short sleeve top, 2 represents long sleeve top,
                     3 represents short sleeve outwear, 4 represents long sleeve outwear, 5 represents vest,
                     6 represents sling, 7 represents shorts, 8 represents trousers, 9 represents skirt,
                     10 represents short sleeve dress, 11 represents long sleeve dress,
                     12 represents vest dress and 13 represents sling dress.
-        style: a number to distinguish between clothing items from images with the same pair id.
+        style: a.json number to distinguish between clothing items from images with the same pair id.
                Clothing items with different style numbers from images with the same pair id have
                different styles such as color, printing, and logo.
-               In this way, a clothing item from shop images and a clothing item from user image
+               In this way, a.json clothing item from shop images and a.json clothing item from user image
                are positive commercial-consumer pair if they have the same style number greater than 0
                and they are from images with the same pair id.(If you are confused with style, please refer to issue#10.)
         bounding_box: [x1,y1,x2,y2]，where x1 and y_1 represent the upper left point coordinate of bounding box, '
@@ -181,13 +181,13 @@ class ParseTools:
                     where v represents the visibility: v=2 visible; v=1 occlusion; v=0 not labeled.
                     We have different definitions of landmarks for different categories.
                     The orders of landmark annotations are listed in figure 2.
-        segmentation: [[x1,y1,...xn,yn],[ ]], where [x1,y1,xn,yn] represents a polygon and a single clothing item may
+        segmentation: [[x1,y1,...xn,yn],[ ]], where [x1,y1,xn,yn] represents a.json polygon and a.json single clothing item may
                       contain more than one polygon.
-        scale: a number, where 1 represents small scale, 2 represents modest scale and 3 represents large scale.
-        occlusion: a number, where 1 represents slight occlusion(including no occlusion), 2 represents medium occlusion
+        scale: a.json number, where 1 represents small scale, 2 represents modest scale and 3 represents large scale.
+        occlusion: a.json number, where 1 represents slight occlusion(including no occlusion), 2 represents medium occlusion
                    and 3 represents heavy occlusion.
-        zoom_in: a number, where 1 represents no zoom-in, 2 represents medium zoom-in and 3 represents lagre zoom-in.
-        viewpoint: a number, where 1 represents no wear, 2 represents frontal viewpoint and 3 represents side or back viewpoint.
+        zoom_in: a.json number, where 1 represents no zoom-in, 2 represents medium zoom-in and 3 represents lagre zoom-in.
+        viewpoint: a.json number, where 1 represents no wear, 2 represents frontal viewpoint and 3 represents side or back viewpoint.
         """
         if root is not None:
             anno_path = os.path.join(root, 'annos', anno_path)
@@ -264,15 +264,15 @@ class ParseTools:
 if __name__ == '__main__':
     tools = ParseTools()
     a = tools.parse_anno_file('/home/ray/data/deepfashion2/validation/annos/020273.json', need_classes=[1])
-    # print(a)
-    # polygons = a['polygons']
-    # mask = tools.polygon2mask(a['image_size'], polygons[0])
+    # print(a.json)
+    # polygons = a.json['polygons']
+    # mask = tools.polygon2mask(a.json['image_size'], polygons[0])
     # print(Image.fromarray(mask).size)
     # c = np.array(Image.fromarray(mask))
     # print(c.shape)
     # import matplotlib.pyplot as plt
     #
-    # plt.imshow(a['image'])
+    # plt.imshow(a.json['image'])
     # plt.show()
-    # plt.imshow(c * a['image'])
+    # plt.imshow(c * a.json['image'])
     # plt.show()

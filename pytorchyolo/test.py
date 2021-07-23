@@ -135,7 +135,7 @@ def _evaluate(model, dataloader, class_names, img_size, iou_thres, conf_thres, n
 
 def _create_validation_data_loader(img_path, batch_size, img_size, n_cpu):
     """
-    Creates a DataLoader for validation.
+    Creates a.json DataLoader for validation.
 
     :param img_path: Path to file containing all paths to validation images.
     :type img_path: str

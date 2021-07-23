@@ -65,9 +65,9 @@ f.close()
 # needed = ''
 # tools = ParseTools()
 # with open('/home/corona/datasets/WiderPerson/train/train.txt','r') as f:
-#     a = f.readlines()
+#     a.json = f.readlines()
 #
-# for item in tqdm(a):
+# for item in tqdm(a.json):
 #     item = item.strip()
 #     info = tools.load_image(item)
 #     print(len(info['labels']))
@@ -82,9 +82,9 @@ f.close()
 #     print(len(anns))
     # for ann in anns:
     #     with open(ann.strip(), 'r') as f:
-    #         a = f.read()
-    #         a = json.loads(a)
-    #     print(a)
+    #         a.json = f.read()
+    #         a.json = json.loads(a.json)
+    #     print(a.json)
 
 
 

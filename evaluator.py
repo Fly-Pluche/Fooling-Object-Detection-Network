@@ -29,7 +29,7 @@ import os
 
 class MaxProbExtractor(nn.Module):
     """
-    get the max score in a batch of images
+    get the max score in a.json batch of images
     """
 
     def __init__(self):
@@ -51,7 +51,7 @@ class MaxProbExtractor(nn.Module):
 
 class MaxExtractor(nn.Module):
     """
-    get the max score and self information of the max iou in a batch of images
+    get the max score and self information of the max iou in a.json batch of images
     """
 
     def __init__(self):
@@ -63,8 +63,8 @@ class MaxExtractor(nn.Module):
         """
         Args:
             model: the model used to predict
-            batch_image: a batch of images [batch size, 3, width, height]
-            people_boxes: a batch of boxes [batch size,lab number,4]
+            batch_image: a.json batch of images [batch size, 3, width, height]
+            people_boxes: a.json batch of boxes [batch size,lab number,4]
         """
         union_image = torchvision.utils.make_grid(batch_image, padding=0)
         # resize union image
@@ -126,7 +126,7 @@ class MaxExtractor(nn.Module):
 
 
 class TotalVariation(nn.Module):
-    """TotalVariation: calculates the total variation of a patch.
+    """TotalVariation: calculates the total variation of a.json patch.
 
     Module providing the functionality necessary to calculate the total vatiation (TV) of an adversarial patch.
 
@@ -157,7 +157,7 @@ class UnionDetector(nn.Module):
             p_image_batch: [batch size,3,w,h]
             people_boxes: []
         """
-        # stitching a square picture
+        # stitching a.json square picture
         w = int(self.config.batch_size)
         # random choose 2 normal images and 2 adversarial images
         image_index1 = [i for i in range(0, w)]
@@ -328,8 +328,8 @@ class PatchEvaluatorOld(nn.Module):
                 images = torch.unbind(p_img_batch, dim=0)
                 for idx, image in enumerate(images):
                     outputs = self.model(image)
-                    # a = model.visual_instance_predictions(image, outputs)
-                    # plt.imshow(a)
+                    # a.json = model.visual_instance_predictions(image, outputs)
+                    # plt.imshow(a.json)
                     # plt.show()
                     outputs = outputs['instances']
                     boxes = outputs.pred_boxes
@@ -443,8 +443,8 @@ class PatchEvaluator(nn.Module):
                 images = torch.unbind(p_img_batch, dim=0)
                 for idx, image in enumerate(images):
                     outputs = self.model(image)
-                    # a = model.visual_instance_predictions(image, outputs)
-                    # plt.imshow(a)
+                    # a.json = model.visual_instance_predictions(image, outputs)
+                    # plt.imshow(a.json)
                     # plt.show()
                     outputs = outputs['instances']
                     boxes = outputs.pred_boxes
@@ -494,8 +494,8 @@ class PatchEvaluator(nn.Module):
                 images = torch.unbind(image_batch, dim=0)
                 for idx, image in enumerate(images):
                     outputs = self.model(image)
-                    # a = model.visual_instance_predictions(image, outputs)
-                    # plt.imshow(a)
+                    # a.json = model.visual_instance_predictions(image, outputs)
+                    # plt.imshow(a.json)
                     # plt.show()
                     outputs = outputs['instances']
                     boxes = outputs.pred_boxes
@@ -590,7 +590,7 @@ class CalculateAP:
         tp = np.cumsum(tp)
         rec = tp / float(nd)
 
-        # avoid divide by zero in case the first detection matches a difficult
+        # avoid divide by zero in case the first detection matches a.json difficult
         # ground truth
         prec = tp / np.maximum(tp + fp, np.finfo(np.float64).eps)
         ap = self.voc_ap(rec, prec, use_07_metric=True)
@@ -634,15 +634,15 @@ class CalculateAP:
         """
         calculate precision and recall (two numpy arrays)
         class id: the class which you want to calculate ap
-        predict: a np array [n, 6]
+        predict: a.json np array [n, 6]
                  n_: the number of each image's boxes/labels
                  the dim 2 include:
                     label: the id of this class
                     confidence: the confidences of each box
                     box: [x,y,w,h] between 0 and 1
-        ground truth: a np array with the same size of the predict
+        ground truth: a.json np array with the same size of the predict
         image_sizes: (width,height)  recording the image's width and height
-        threshold: box's iou > threshold means this box is a right box
+        threshold: box's iou > threshold means this box is a.json right box
         predict_type: the boxes's type, if your boxes'
         """
         width, height = image_size[0], image_size[1]

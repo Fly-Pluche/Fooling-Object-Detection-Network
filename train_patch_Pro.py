@@ -2,10 +2,8 @@ from __future__ import absolute_import
 
 import time
 
-import torch
+import numpy as np
 import torchvision
-import torch.nn.functional as F
-from PIL import Image
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from torchvision import transforms
@@ -15,8 +13,11 @@ from evaluator import MaxExtractor, TotalVariation, UnionDetector
 from evaluator import PatchEvaluator
 from load_data import ListDatasetAnn
 from models import *
-from patch import PatchTransformerPro, PatchApplierPro, PatchTransformer
+import matplotlib.pyplot as plt
+from patch import PatchTransformerPro, PatchApplierPro
 from patch_config import *
+from utils.transforms import CMYK2RGB
+from utils.utils import imshow
 
 # set random seed
 torch.manual_seed(2233)
@@ -28,9 +29,10 @@ class PatchTrainer(object):
     def __init__(self):
         super(PatchTrainer, self).__init__()
         self.config = patch_configs['base']()  # load base config
-        self.model_ = FasterRCNN_R_101_FPN()
-        self.name = 'Faster_RCNN_R101'
-        self.config.anchor_base = True
+        # self.model_ = Yolov3(img_size=self.config.img_size[0])
+        # self.name = 'Yolov3'
+        self.model_ = RetinaNet()
+        self.name = 'RetinaNet_without_iou_loss'
         self.log_path = None
         self.writer = self.init_tensorboard(name='base')
         self.patch_transformer = PatchTransformerPro().cuda()
@@ -44,8 +46,8 @@ class PatchTrainer(object):
     def init_tensorboard(self, name=None):
         if name is not None:
             time_str = time.strftime("%Y%m%d-%H%M%S")
-            self.log_path = f'/home/ma-user/work/logs/{time_str}_{name}_{self.name}'
-            return SummaryWriter(f'/home/ma-user/work/logs/{time_str}_{name}_{self.name}')
+            self.log_path = f'/home/mist/logs/{time_str}_{name}_{self.name}'
+            return SummaryWriter(f'/home/mist/logs/{time_str}_{name}_{self.name}')
         else:
             return SummaryWriter()
 
@@ -54,7 +56,7 @@ class PatchTrainer(object):
         optimizer a adversarial patch
         """
         # load train datasets
-        datasets = ListDatasetAnn(self.config.deepfooling_txt, range_=[160, 1760])
+        datasets = ListDatasetAnn(self.config.deepfooling_txt, range_=[80, 780])
         train_data = DataLoader(
             datasets,
             batch_size=self.config.batch_size,
@@ -63,7 +65,7 @@ class PatchTrainer(object):
         )
 
         test_data = DataLoader(
-            ListDatasetAnn(self.config.deepfooling_txt, range_=[0, 160]),
+            ListDatasetAnn(self.config.deepfooling_txt, range_=[0, 4]),
             num_workers=1,
             batch_size=self.config.batch_size
         )
@@ -72,11 +74,11 @@ class PatchTrainer(object):
 
         epoch_length = len(train_data)
         # generate a gray patch
-        adv_patch_cpu = self.generate_patch(
-            load_from_file='/home/corona/attack/Fooling-Object-Detection-Network/images/random_patch.jpg')
-        adv_patch_cpu.requires_grad_(True)
+        adv_patch_cpu_cmyk = self.generate_patch(is_random=True)
+        # adv_patch_cpu_cmyk = self.generate_patch()
+        adv_patch_cpu_cmyk.requires_grad_(True)
         # use adam to update adv_patch
-        optimizer = torch.optim.Adam([adv_patch_cpu], lr=self.config.start_learning_rate)
+        optimizer = torch.optim.Adam([adv_patch_cpu_cmyk], lr=self.config.start_learning_rate)
         scheduler = self.config.scheduler_factory(optimizer)  # used to update learning rate
         min_ap = 1
         for epoch in range(10000):
@@ -92,7 +94,8 @@ class PatchTrainer(object):
                 image_batch = image_batch.cuda()
                 labels_batch = labels_batch.cuda()
                 people_boxes_batch = people_boxes_batch.cuda()
-                adv_patch = adv_patch_cpu.cuda()
+                adv_patch_cmyk = adv_patch_cpu_cmyk.cuda()
+                adv_patch = CMYK2RGB(adv_patch_cmyk)
                 adv_batch_t, adv_batch_mask_t = self.patch_transformer(adv_patch,
                                                                        clothes_boxes_batch,
                                                                        segmentations_batch,
@@ -100,30 +103,41 @@ class PatchTrainer(object):
                                                                        image_batch)
                 p_img_batch = self.patch_applier(image_batch, adv_batch_t, adv_batch_mask_t)
                 p_img_batch = F.interpolate(p_img_batch, (self.config.img_size[1], self.config.img_size[0]))
+
                 # show apply affection
-                # plt.imshow(np.array(functional.to_pil_image(p_img_batch[0])))
-                # plt.show()
-                # calculate union iou loss
-                predicted_id, attack_id = self.union_detector(self.model_, image_batch, p_img_batch, people_boxes_batch)
-                union_iou_loss = self.entropy(predicted_id, attack_id)
+                plt.imshow(np.array(functional.to_pil_image(p_img_batch[0])))
+                plt.show()
                 max_prob, max_iou_t = self.max_extractor(self.model_, p_img_batch, people_boxes_batch)
+                det_loss = torch.sum(max_prob)
+                det_loss = det_loss * 0.5
                 tv = self.total_variation(adv_patch)
                 tv_loss = tv * 2
                 # calculate the entropy
-                #                 I_max_prob = torch.log2(1 / (1 - max_prob))
-                print(max_prob)
-                det_loss = torch.sum(max_prob)
-                det_loss = det_loss
+                # I_max_prob = torch.log2(1 / (1 - max_prob))
+                # print(max_prob)
+
                 # calculate iou loss
                 iou_loss = torch.sum(max_iou_t)
+
+                # calculate union iou loss
+                predicted_id, attack_id = self.union_detector(self.model_, image_batch, p_img_batch, people_boxes_batch)
+
+                union_iou_loss = self.entropy(predicted_id, attack_id)
+                union_iou_loss = union_iou_loss * 0.5
                 # calculate cross entropy of union detector
-                print(det_loss)
-                print(iou_loss)
-                print(union_iou_loss)
-                #                 loss = det_loss + torch.max(tv_loss, torch.tensor(0.1).cuda()) + iou_loss + union_iou_loss
-                #                 loss = det_loss + torch.max(tv_loss, torch.tensor(0.1).cuda()) +
-                #                 loss = det_loss
-                loss = det_loss + torch.max(tv_loss, torch.tensor(0.1).cuda()) + iou_loss + union_iou_loss
+                print('det_loss: ', det_loss)
+                print('iou_loss', iou_loss)
+                print("union_iou_loss", union_iou_loss)
+                # print('iou', union_iou_loss)
+                # loss = det_loss + torch.max(tv_loss, torch.tensor(0.1).cuda()) + iou_loss + union_iou_loss
+                # loss = det_loss + torch.max(tv_loss, torch.tensor(0.1).cuda()) +
+                # loss = det_loss
+                # loss = det_loss + torch.max(tv_loss, torch.tensor(0.1).cuda()) + iou_loss + union_iou_loss
+                # loss = torch.max(tv_loss, torch.tensor(0.1).cuda()) + det_loss + union_iou_loss + iou_loss
+                loss = torch.max(tv_loss, torch.tensor(0.1).cuda()) + iou_loss  # one loss
+                # loss = torch.max(tv_loss, torch.tensor(0.1).cuda()) + det_loss + iou_loss  # without union loss
+                # loss = torch.max(tv_loss, torch.tensor(0.1).cuda()) + det_loss + iou_loss + union_iou_loss
+                # loss = torch.max(tv_loss, torch.tensor(0.1).cuda()) + det_loss + union_iou_loss  # without iou loss
                 # evaluate
                 ep_det_loss += det_loss.detach().cpu().numpy()
                 ep_tv_loss += tv_loss.detach().cpu().numpy()
@@ -134,7 +148,7 @@ class PatchTrainer(object):
                 loss.backward()
                 optimizer.step()
                 optimizer.zero_grad()
-                adv_patch_cpu.data.clamp_(0, 1)  # keep patch in image range
+                adv_patch_cmyk.data.clamp_(0, 1)  # keep patch in image range
 
                 if i_batch % 23 == 0:
                     iteration = epoch_length * epoch + i_batch
@@ -144,7 +158,7 @@ class PatchTrainer(object):
                     self.writer.add_scalar('union iou loss', union_iou_loss.detach().cpu().numpy(), iteration)
                     self.writer.add_scalar('misc/epoch', epoch, iteration)
                     self.writer.add_scalar('misc/learning_rate', optimizer.param_groups[0]["lr"], iteration)
-                    self.writer.add_image('patch', adv_patch_cpu, iteration)
+                    # self.writer.add_image('patch', adv_patch.detach().cpu(), iteration)
 
                 if i_batch + 1 >= len(train_data):
                     print('\n')
@@ -189,6 +203,7 @@ class PatchTrainer(object):
             del adv_batch_t, max_prob, det_loss, p_img_batch, tv_loss, loss, adv_batch_mask_t, iou_loss, union_iou_loss
             torch.cuda.empty_cache()
 
+
     def generate_patch(self, load_from_file=None, is_random=False):
         # load a image from local patch
         if load_from_file is not None:
@@ -197,9 +212,12 @@ class PatchTrainer(object):
             patch = transforms.PILToTensor()(patch) / 255.
             return patch
         if is_random:
-            return torch.rand((3, self.config.patch_size, self.config.patch_size))
-        return torch.full((3, self.config.patch_size, self.config.patch_size), 0.5)
+            return torch.rand((4, self.config.patch_size, self.config.patch_size))
+        return torch.full((4, self.config.patch_size, self.config.patch_size), 0.5)
 
 
 if __name__ == '__main__':
-    pass
+    a = PatchTrainer()
+    img = a.generate_patch(is_random=False)
+    img = functional.to_pil_image(img, mode='CMYK')
+    img.save('./a.TIF')

@@ -28,7 +28,7 @@ class ImageTools:
 
     # add patch on the box
     # box: [x_min,y_min,x_max,y_max]
-    # mask: a mask has the same size with the patch
+    # mask: a.json mask has the same size with the patch
     def add_patch_in_box(self, frame, patch, box, mask):
         box_height = box[3] - box[1]
         box_weight = box[2] - box[0]
@@ -43,7 +43,7 @@ class ImageTools:
         )
         box_middle_y_min = box[1] + box_height / 2 - patch_height / 2 + random.randint(
             -int((box_height / 2 - patch_height / 2) / 3), int((box_height / 2 - patch_height / 2) / 3))
-        # create a mask and add mask to the right place
+        # create a.json mask and add mask to the right place
         mask_, patch_mask = self.__create_patch_masks(box_middle_x_min, box_middle_y_min, frame, mask, patch,
                                                       patch_height, patch_weight)
         frame[mask_ != 0] = patch_mask[mask_ != 0]
@@ -72,13 +72,13 @@ class ImageTools:
 
     # draw boxes on the image
     # boxes: [(x_min, y_min, x_max, y_max),.....]
-    # labels: a list has the same size with boxes. the label of the boxes.
+    # labels: a.json list has the same size with boxes. the label of the boxes.
     def visual(self, frame, boxes, labels, color=(80, 190, 232)):
         for box, label in zip(boxes, labels):
             self.draw_box(frame, box, label, color)
         return frame
 
-    # draw a beautiful box
+    # draw a.json beautiful box
     def draw_box(self, frame, box, label, color):
         font = cv2.FAST_FEATURE_DETECTOR_THRESHOLD
         x_min, y_min, x_max, y_max = map(int, box)

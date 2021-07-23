@@ -13,12 +13,22 @@ from torchvision.transforms import functional
 from torchvision import transforms
 
 
-def predict_one_image(model, image, threshold=0.8):
+def show_predict_result(model, img_path, scale=1.0):
+    image = cv2.imread(img_path)
+    image = cv2.resize(image, (int(image.shape[1] * scale), int(image.shape[0] * scale)))
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    result = predict_one_image(model, image, 0.5)
+
+    plt.imshow(result)
+    plt.show()
+
+
+def predict_one_image(model, image, threshold=0.4):
     """
     Predict one image
     Args:
         model: A default mode from models.py
-        image: a rgb np array
+        image: a.json rgb np array
         threshold: boxes under this value will not be shown in the result.
     """
     output = model.default_predictor_(image)
@@ -38,18 +48,24 @@ def predict_one_video(model, video_path, output_path, threshold=0.5):
     video = cv2.VideoCapture(video_path)
     fourcc = cv2.VideoWriter_fourcc('m', 'p', '4', 'v')
     total_frames = int(video.get(7))
-    fps = 25
+    fps = 24
     _, first_image = video.read()
     video_width, video_height = first_image.shape[1], first_image.shape[0]
-
-    video_writer = cv2.VideoWriter(output_path, fourcc, fps, (int(video_width * 0.4), int(video_height * 0.4)))
-    for i in tqdm(range(total_frames - 1)):
+    scale = 1
+    video_writer = cv2.VideoWriter(output_path, fourcc, fps, (video_width, video_height))
+    # video_writer = cv2.VideoWriter(output_path, fourcc, fps, (int(video_width * scale), int(video_height * scale)))
+    for i in tqdm(range(int(total_frames) - 2)):
         _, frame = video.read()
-        # BGR to RGB
-        frame = frame[..., ::-1]
-        frame = cv2.resize(frame, (int(video_width * 0.4), int(video_height * 0.4)))
-        result = predict_one_image(model, frame, threshold)
-        video_writer.write(result[..., ::-1])
+        if _ and frame is not None:
+            # BGR to RGB
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            # frame = frame[..., ::-1]
+            # frame = cv2.resize(frame, (int(video_width * scale), int(video_height * scale)))
+            result = predict_one_image(model, frame, threshold)
+            result = cv2.cvtColor(result, cv2.COLOR_RGB2BGR)
+            video_writer.write(result)
+        else:
+            print('....')
     video_writer.release()
 
 
@@ -71,9 +87,9 @@ def generate_patch(config, load_from_file=None, is_random=False):
     Args:
         config: the config set about patch
         load_from_file: the path of the patch file
-        is_random: choose to produce a random patch or not
+        is_random: choose to produce a.json random patch or not
     """
-    # load a image from local patch
+    # load a.json image from local patch
     if load_from_file is not None:
         patch = Image.open(load_from_file)
         patch = patch.resize((config.patch_size, config.patch_size))
@@ -124,24 +140,34 @@ def generate_attacked_results(adv_patch_cpu, config, data_loader, model):
 
 
 if __name__ == '__main__':
-    model = FasterRCNN_R50_C4()
-    # img = cv2.imread('images/a.jpg')
+    model = FasterRCNN()
+    scale = 1
+    # show_predict_result(model, './images/aaa.jpg', scale)
+    # show_predict_result(model, './images/aaa2.jpg', scale)
+    # show_predict_result(model, './images/aaa3.jpg', scale)
+    # show_predict_result(model, './images/aaa5.jpg', scale)
+    # show_predict_result(model, './images/aaa.jpg', scale)
+    # show_predict_result(model, './images/aaa7.jpg', scale)
+    predict_one_video(model, './vedios/202107181817.mp4', './vedios/out.mp4')
+    # predict_one_image(model,)
+    # model = FasterRCNN_R50_C4()
+    # img = cv2.imread('images/a.json.jpg')
     # out = model.default_predictor(img)
     # img_ = model.visual_instance_predictions(img[:, :, ::-1], out, mode='other')
     # cv2.imwrite('images/a_.jpg', img_[:, :, ::-1])
-    data_loader = get_data_loader()
-    config = patch_configs['base']()
-    config.anchor_base = False
-    adv_patch_cpu = generate_patch(config, load_from_file='./new_patches/fa_new.jpg')
-    generate_attacked_results(adv_patch_cpu, config, data_loader, model)
+    # data_loader = get_data_loader()
+    # config = patch_configs['base']()
+    # config.anchor_base = False
+    # adv_patch_cpu = generate_patch(config, load_from_file='./new_patches/fa_new.jpg')
+    # generate_attacked_results(adv_patch_cpu, config, data_loader, model)
     # predict_one_video(model, 'vedios/test.mp4', 'vedios/output.mp4')
     # image = np.array(Image.open('images/IMG_20210407_114942.jpg').resize((1066, 800)))
     # print(image.shape)
     # # image = np.resize(image, (300, 400, 3))
     # # print(image.shape)
     # output = model.default_predictor(image)
-    # a = model.visual_instance_predictions(image, output, mode='pil', threshold=0.5)
+    # a.json = model.visual_instance_predictions(image, output, mode='pil', threshold=0.5)
     # import matplotlib.pyplot as plt
     #
-    # plt.imshow(a)
+    # plt.imshow(a.json)
     # plt.show()

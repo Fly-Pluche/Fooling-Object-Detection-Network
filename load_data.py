@@ -16,10 +16,43 @@ torch.cuda.manual_seed(2233)
 np.random.seed(2233)
 
 
+class AddPepperNoise(object):
+    """增加椒盐噪声
+    Args:
+        snr （float）: 信噪比，Signal Noise Rate
+        p (float): 概率值，依概率执行该操作
+    """
+
+    def __init__(self, snr, p=0.9):
+        assert isinstance(snr, float) or (isinstance(p, float))
+        self.snr = snr
+        self.p = p
+
+    def __call__(self, img):
+        """
+        Args:
+            img (PIL Image): PIL Image
+        Returns:
+            PIL Image: PIL image.
+        """
+        if random.uniform(0, 1) < self.p:
+            img_ = np.array(img).copy()
+            h, w, c = img_.shape
+            signal_pct = self.snr
+            noise_pct = (1 - self.snr)
+            mask = np.random.choice((0, 1, 2), size=(h, w, 1), p=[signal_pct, noise_pct / 2., noise_pct / 2.])
+            mask = np.repeat(mask, c, axis=2)
+            img_[mask == 1] = 255  # 盐噪声
+            img_[mask == 2] = 0  # 椒噪声
+            return Image.fromarray(img_.astype('uint8')).convert('RGB')
+        else:
+            return img
+
+
 # load datasets
 class ListDataset(Dataset):
     """
-    load datasets from a txt file which contains the path of the image file (yolo datasets' type)
+    load datasets from a.json txt file which contains the path of the image file (yolo datasets' type)
     Args:
         txt: the txt file path
         number: how many pictures you want to load. default is all the image
@@ -40,14 +73,19 @@ class ListDataset(Dataset):
         else:
             self.file_list = self.parser.load_file_txt(txt)
         self.max_lab = 21
+        self.add_noise = AddPepperNoise(0.9)
 
     def __getitem__(self, id):
         image_path = self.file_list[id]
         image_info = self.parser.load_image(image_path, mode='numpy',
-                                            root=self.configs.root_path)  # load a rgb type image
+                                            root=self.configs.root_path)  # load a.json rgb type image
         # boxes: [x,y,w,h]
         image, boxes = self.pad_and_scale(image_info['image'], image_info['boxes'])
         boxes, labels = self.pad_lab_and_boxes(boxes, image_info['labels'])
+        # image enhance
+        image = transforms.ColorJitter(brightness=1)(image)
+        image = transforms.ColorJitter(contrast=1)(image)
+        image = transforms.ColorJitter(hue=0.5)(image)
         image = transforms.ToTensor()(image)
         return image, boxes, labels
 
@@ -150,7 +188,7 @@ class ListDatasetAnn(ListDataset):
 
     def landmarks2masks(self, landmarks):
         """
-        a batch of landmarks to a batch of masks
+        a.json batch of landmarks to a.json batch of masks
         Args:
             landmarks: [batch size, max_landmarks, 3]
         """

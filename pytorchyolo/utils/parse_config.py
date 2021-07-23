@@ -8,7 +8,7 @@ def parse_model_config(path):
     lines = [x.rstrip().lstrip() for x in lines]  # get rid of fringe whitespaces
     module_defs = []
     for line in lines:
-        if line.startswith('['):  # This marks the start of a new block
+        if line.startswith('['):  # This marks the start of a.json new block
             module_defs.append({})
             module_defs[-1]['type'] = line[1:-1].rstrip()
             if module_defs[-1]['type'] == 'convolutional':

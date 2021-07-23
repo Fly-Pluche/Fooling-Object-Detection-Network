@@ -26,7 +26,7 @@ from torchsummary import summary
 
 
 def _create_data_loader(img_path, batch_size, img_size, n_cpu, multiscale_training=False):
-    """Creates a DataLoader for training.
+    """Creates a.json DataLoader for training.
 
     :param img_path: Path to file containing all paths to training images.
     :type img_path: str

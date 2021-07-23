@@ -150,8 +150,8 @@ for item in aug_annos_path:
     a += item
     a += '\n'
 
-# with open('a.txt', 'w') as f:
-#     f.write(a)
+# with open('a.json.txt', 'w') as f:
+#     f.write(a.json)
 
 D = DataAugmentation()
 
