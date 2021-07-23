@@ -1,9 +1,9 @@
-./test_code
+test_code
 *.mp4
-./vedios
-./logs
+vedios
+logs
 weights
 *.weights
 *.pt
 coco
-
+vedios
