@@ -139,6 +139,7 @@ class ListDatasetAnn(ListDataset):
         self.max_landmarks = self.configs.max_lab
         self.name = name
         self.tools = ParseTools()
+        self.transform = self.get_transform()
 
     def __getitem__(self, id):
         anno_path = self.file_list[id]
@@ -159,6 +160,7 @@ class ListDatasetAnn(ListDataset):
 
         clothes_boxes, people_boxes, labels = self.pad_lab_and_boxes_(clothes_boxes, people_boxes, labels)
         landmarks = self.pad_landmarks(landmarks)
+        image = self.transform(image)
         image = functional.pil_to_tensor(image) / 255.
         # image: [3,w,h] boxes: [max_pad, 4] (x,y,w,h) labels: [max_pad] landmarks: [max_landmarks,25,3]
         segmentations = self.landmarks2masks(landmarks)
@@ -170,6 +172,20 @@ class ListDatasetAnn(ListDataset):
         if self.name:
             return image, clothes_boxes, labels, landmarks, segmentations, image_info['image_name']
         return image, clothes_boxes, people_boxes, labels, landmarks, segmentations
+
+    def get_transform(self):
+        # 随机改变图像的亮度
+        brightness_change = transforms.ColorJitter(brightness=0.5)
+        # 随机改变图像的色调
+        hue_change = transforms.ColorJitter(hue=0.5)
+        # 随机改变图像的对比度
+        contrast_change = transforms.ColorJitter(contrast=0.5)
+        transform = transforms.Compose([
+            brightness_change,
+            hue_change,
+            contrast_change,
+        ])
+        return transform
 
     def pad_lab_and_boxes_(self, clothes_boxes, people_boxes, labels):
         labels = torch.from_numpy(np.array(labels))
@@ -280,7 +296,7 @@ def load_test_data_loader(txt, number=10):
 
 if __name__ == '__main__':
     config = patch_configs['base']()
-    da = ListDatasetAnn(config.deepfooling_txt, 10)
+    da = ListDatasetAnn(config.deepfashion_txt, 10)
     da = iter(da)
     next(da)
     next(da)

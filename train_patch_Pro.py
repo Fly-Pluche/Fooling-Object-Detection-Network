@@ -18,6 +18,9 @@ from patch import PatchTransformerPro, PatchApplierPro
 from patch_config import *
 from utils.transforms import CMYK2RGB
 from utils.utils import imshow
+import warnings
+
+warnings.filterwarnings('ignore')
 
 # set random seed
 torch.manual_seed(2233)
@@ -33,7 +36,7 @@ class PatchTrainer(object):
         # self.name = 'Yolov3'
         self.model_ = RetinaNet()
         self.name = 'RetinaNet_without_iou_loss'
-        self.log_path = None
+        self.log_path = self.config.log_path
         self.writer = self.init_tensorboard(name='base')
         self.patch_transformer = PatchTransformerPro().cuda()
         self.patch_applier = PatchApplierPro().cuda()
@@ -42,12 +45,13 @@ class PatchTrainer(object):
         self.union_detector = UnionDetector().cuda()
         self.patch_evaluator = None
         self.entropy = nn.CrossEntropyLoss()
+        self.is_cmyk = self.config.is_cmyk
 
     def init_tensorboard(self, name=None):
         if name is not None:
             time_str = time.strftime("%Y%m%d-%H%M%S")
-            self.log_path = f'/home/mist/logs/{time_str}_{name}_{self.name}'
-            return SummaryWriter(f'/home/mist/logs/{time_str}_{name}_{self.name}')
+            self.log_path = f'{self.config.log_path}/{time_str}_{name}_{self.name}'
+            return SummaryWriter(f'{self.config.log_path}/{time_str}_{name}_{self.name}')
         else:
             return SummaryWriter()
 
@@ -65,7 +69,7 @@ class PatchTrainer(object):
         )
 
         test_data = DataLoader(
-            ListDatasetAnn(self.config.deepfooling_txt, range_=[0, 4]),
+            ListDatasetAnn(self.config.deepfooling_txt, range_=[0, 80]),
             num_workers=1,
             batch_size=self.config.batch_size
         )
@@ -74,11 +78,11 @@ class PatchTrainer(object):
 
         epoch_length = len(train_data)
         # generate a gray patch
-        adv_patch_cpu_cmyk = self.generate_patch(is_random=True)
+        adv_patch_cpu = self.generate_patch(is_random=True,is_cmyk=self.is_cmyk)
         # adv_patch_cpu_cmyk = self.generate_patch()
-        adv_patch_cpu_cmyk.requires_grad_(True)
+        adv_patch_cpu.requires_grad_(True)
         # use adam to update adv_patch
-        optimizer = torch.optim.Adam([adv_patch_cpu_cmyk], lr=self.config.start_learning_rate)
+        optimizer = torch.optim.Adam([adv_patch_cpu], lr=self.config.start_learning_rate)
         scheduler = self.config.scheduler_factory(optimizer)  # used to update learning rate
         min_ap = 1
         for epoch in range(10000):
@@ -94,8 +98,9 @@ class PatchTrainer(object):
                 image_batch = image_batch.cuda()
                 labels_batch = labels_batch.cuda()
                 people_boxes_batch = people_boxes_batch.cuda()
-                adv_patch_cmyk = adv_patch_cpu_cmyk.cuda()
-                adv_patch = CMYK2RGB(adv_patch_cmyk)
+                adv_patch = adv_patch_cpu.cuda()
+                if self.is_cmyk:
+                  adv_patch = CMYK2RGB(adv_patch)
                 adv_batch_t, adv_batch_mask_t = self.patch_transformer(adv_patch,
                                                                        clothes_boxes_batch,
                                                                        segmentations_batch,
@@ -105,8 +110,8 @@ class PatchTrainer(object):
                 p_img_batch = F.interpolate(p_img_batch, (self.config.img_size[1], self.config.img_size[0]))
 
                 # show apply affection
-                plt.imshow(np.array(functional.to_pil_image(p_img_batch[0])))
-                plt.show()
+                # plt.imshow(np.array(functional.to_pil_image(p_img_batch[0])))
+                # plt.show()
                 max_prob, max_iou_t = self.max_extractor(self.model_, p_img_batch, people_boxes_batch)
                 det_loss = torch.sum(max_prob)
                 det_loss = det_loss * 0.5
@@ -129,15 +134,8 @@ class PatchTrainer(object):
                 print('iou_loss', iou_loss)
                 print("union_iou_loss", union_iou_loss)
                 # print('iou', union_iou_loss)
-                # loss = det_loss + torch.max(tv_loss, torch.tensor(0.1).cuda()) + iou_loss + union_iou_loss
-                # loss = det_loss + torch.max(tv_loss, torch.tensor(0.1).cuda()) +
-                # loss = det_loss
-                # loss = det_loss + torch.max(tv_loss, torch.tensor(0.1).cuda()) + iou_loss + union_iou_loss
-                # loss = torch.max(tv_loss, torch.tensor(0.1).cuda()) + det_loss + union_iou_loss + iou_loss
-                loss = torch.max(tv_loss, torch.tensor(0.1).cuda()) + iou_loss  # one loss
-                # loss = torch.max(tv_loss, torch.tensor(0.1).cuda()) + det_loss + iou_loss  # without union loss
-                # loss = torch.max(tv_loss, torch.tensor(0.1).cuda()) + det_loss + iou_loss + union_iou_loss
-                # loss = torch.max(tv_loss, torch.tensor(0.1).cuda()) + det_loss + union_iou_loss  # without iou loss
+                loss = det_loss + torch.max(tv_loss, torch.tensor(0.1).cuda()) + iou_loss + union_iou_loss
+
                 # evaluate
                 ep_det_loss += det_loss.detach().cpu().numpy()
                 ep_tv_loss += tv_loss.detach().cpu().numpy()
@@ -148,16 +146,17 @@ class PatchTrainer(object):
                 loss.backward()
                 optimizer.step()
                 optimizer.zero_grad()
-                adv_patch_cmyk.data.clamp_(0, 1)  # keep patch in image range
+                adv_patch_cpu.data.clamp_(0, 1)  # keep patch in image range
 
-                if i_batch % 23 == 0:
+                if i_batch % 5 == 0:
                     iteration = epoch_length * epoch + i_batch
                     self.writer.add_scalar('total_loss', loss.detach().cpu().numpy(), iteration)
                     self.writer.add_scalar('loss/det_loss', det_loss.detach().cpu().numpy(), iteration)
-                    self.writer.add_scalar('loss/tv_loss', tv_loss.detach().cpu().numpy(), iteration)
+                    # self.writer.add_scalar('loss/tv_loss', tv_loss.detach().cpu().numpy(), iteration)
                     self.writer.add_scalar('union iou loss', union_iou_loss.detach().cpu().numpy(), iteration)
-                    self.writer.add_scalar('misc/epoch', epoch, iteration)
-                    self.writer.add_scalar('misc/learning_rate', optimizer.param_groups[0]["lr"], iteration)
+                    # self.writer.add_scalar('misc/epoch', epoch, iteration)
+                    # self.writer.add_scalar('misc/learning_rate', optimizer.param_groups[0]["lr"], iteration)
+                    self.writer.add_image('patch', adv_patch.cpu(), iteration)
                     # self.writer.add_image('patch', adv_patch.detach().cpu(), iteration)
 
                 if i_batch + 1 >= len(train_data):
@@ -173,13 +172,23 @@ class PatchTrainer(object):
             # adv_patch_save = np.asarray(np.uint8(adv_patch_save))
             # cv2.imwrite(os.path.join(self.config.save_adv_patch_path, str(epoch) + '.jpg'), adv_patch_save)
             with torch.no_grad():
-                adv = adv_patch_cpu.clone()
+                if self.is_cmyk:
+                  adv_cmyk = adv_patch_cpu.clone()
+                  adv = adv_cmyk.cuda()
+                  adv = CMYK2RGB(adv)
+                else:
+                  adv = adv_patch_cpu.clone()
                 ap = self.patch_evaluator(adv, 0.5)  # ap50
                 self.writer.add_scalar('ap', ap, epoch)
                 if float(ap) < min_ap:
                     name = os.path.join(self.log_path, str(float(ap) * 100) + '.jpg')
                     torchvision.utils.save_image(adv, name)
                     min_ap = float(ap)
+                    if self.is_cmyk:
+                      name2 = os.path.join(self.log_path, str(float(ap) * 100) + '.TIF')
+                      adv_cmyk = functional.to_pil_image(adv_cmyk)
+                      adv_cmyk.save(name2)
+                    
             ep_det_loss = ep_det_loss / len(train_data)
             ep_tv_loss = ep_tv_loss / len(train_data)
             ep_iou_loss = ep_iou_loss / len(train_data)
@@ -194,6 +203,7 @@ class PatchTrainer(object):
                 self.writer.add_scalar('ep_det_loss', ep_det_loss, epoch)
                 self.writer.add_scalar('ep_iou_loss', ep_iou_loss, epoch)
                 self.writer.add_scalar('ep_union_iou_loss', ep_union_iou_loss, epoch)
+                self.writer.add_scalar('AP', ap, epoch)
 
             print('| DET LOSS: ', ep_det_loss)
             print('| TV LOSS: ', ep_tv_loss)
@@ -203,8 +213,7 @@ class PatchTrainer(object):
             del adv_batch_t, max_prob, det_loss, p_img_batch, tv_loss, loss, adv_batch_mask_t, iou_loss, union_iou_loss
             torch.cuda.empty_cache()
 
-
-    def generate_patch(self, load_from_file=None, is_random=False):
+    def generate_patch(self, load_from_file=None, is_random=False,is_cmyk=0):
         # load a image from local patch
         if load_from_file is not None:
             patch = Image.open(load_from_file)
@@ -212,8 +221,14 @@ class PatchTrainer(object):
             patch = transforms.PILToTensor()(patch) / 255.
             return patch
         if is_random:
-            return torch.rand((4, self.config.patch_size, self.config.patch_size))
-        return torch.full((4, self.config.patch_size, self.config.patch_size), 0.5)
+            if is_cmyk:
+              return torch.rand((4, self.config.patch_size, self.config.patch_size))
+            else:
+              return torch.rand((3, self.config.patch_size, self.config.patch_size))
+        if is_cmyk:
+          return torch.full((4, self.config.patch_size, self.config.patch_size), 0.5)
+        else:
+          return torch.full((3, self.config.patch_size, self.config.patch_size), 0.5)
 
 
 if __name__ == '__main__':

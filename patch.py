@@ -223,7 +223,6 @@ class PatchApplierPro(nn.Module):
         for adv, mask in zip(advs, masks):
             mask = mask.type(torch.float32)
             img_batch = torch.where(mask > 0.00001, adv, img_batch)
-
         # plt.imshow(np.asarray(functional.to_pil_image(img_batch[0])))
         # plt.show()
         return img_batch
@@ -575,15 +574,11 @@ class PatchTransformerPro(nn.Module):
         # Linear Burn
         # adv_batch_t[mask == 1] = adv_batch_t[mask == 1] + images_batch_gray[
         #     mask == 1] - 1
+
         useful_points = torch.sum(useful_points, dim=[2, 3])
         adv_batch_t[useful_points == 0] = 0
         #
         adv_mask_batch_t[useful_points == 0] = 0
-        # test_adv = adv_mask_batch_t[0][0]
-        # test_adv = functional.to_pil_image(test_adv)
-        # test_adv = np.asarray(test_adv)
-        # plt.imshow(test_adv)
-        # plt.show()
         return adv_batch_t, adv_mask_batch_t
 
 
@@ -621,7 +616,7 @@ if __name__ == '__main__':
     # print(image.dt_tris)
     image_id = 3
     config = patch_configs['base']()
-    da = ListDatasetAnn(config.deepfooling_txt, 30)
+    da = ListDatasetAnn(config.deepfashion_txt, 30)
     loader = torch.utils.data.DataLoader(
         da,
         batch_size=config.batch_size,

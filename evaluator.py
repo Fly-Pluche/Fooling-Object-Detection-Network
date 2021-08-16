@@ -23,6 +23,7 @@ from PIL import Image
 from torchvision.transforms import functional
 import random
 import os
+from tools import save_predict_image_torch
 
 
 # os.environ["CUDA_VISIBLE_DEVICES"] = "1"
@@ -73,7 +74,7 @@ class MaxExtractor(nn.Module):
             [0, 1, 0.]
         ], dtype=torch.float).cuda()
         N, C, W, H = union_image.unsqueeze(0).size()
-        size = torch.Size((N, C, W // 4, H // 4))
+        size = torch.Size((N, C, W // 2, H // 2))
         grid = F.affine_grid(theta.unsqueeze(0), size)
         output = F.grid_sample(union_image.unsqueeze(0), grid)
         union_image = output[0]
@@ -119,10 +120,63 @@ class MaxExtractor(nn.Module):
                 max_prob = torch.sqrt(max_prob)
                 max_prob_t[i] = max_prob
                 max_iou_t[i] = iou_max
+        return max_prob_t, max_iou_t
+
+
+class ConfMaxExtractor(nn.Module):
+    """
+    get the max score
+    """
+
+    def __init__(self):
+        super(ConfMaxExtractor, self).__init__()
+        self.config = patch_configs['base']()
+        self.tools = ParseTools()
+
+    def forward(self, model, batch_image):
+        """
+        Args:
+            model: the model used to predict
+            batch_image: a.json batch of images [batch size, 3, width, height]
+        """
+        # make a union image: concat a batch of images
+        # [4,3,600,600] => [3,1200,1200]
+        union_image = torchvision.utils.make_grid(batch_image, padding=0, nrow=2)
+        # resize union image
+        theta = torch.tensor([
+            [1, 0, 0.],
+            [0, 1, 0.]
+        ], dtype=torch.float).cuda()
+        N, C, W, H = union_image.unsqueeze(0).size()
+        size = torch.Size((N, C, W // 2, H // 2))
+        grid = F.affine_grid(theta.unsqueeze(0), size)
+        output = F.grid_sample(union_image.unsqueeze(0), grid)
+        union_image = output.squeeze(0)
+        # plt.imshow(np.array(functional.to_pil_image(union_image)))
+        # plt.show()
+        # union_image = functional.resize()
+
+        # unbind images
+        images = torch.unbind(batch_image, 0)
+
+        # init max conf loss
+        max_prob_t = torch.cuda.FloatTensor(batch_image.size(0)).fill_(0)
+        for i, image in enumerate(images):
+            output = model(image)["instances"]
+            pred_classes = output.pred_classes
+            scores = output.scores
+            people_scores = scores[pred_classes == 0]  # select people predict score
+            if len(people_scores) != 0:
+                max_prob = torch.max(people_scores)
+                max_prob_t[i] = max_prob
         union_detect = model(union_image)['instances']
         labels = union_detect.pred_classes
-        max_prob_t = union_detect[labels == 0].scores
-        return max_prob_t, max_iou_t
+        max_prob_t_union = union_detect[labels == 0].scores
+
+        # calculate two parts of conf loss
+        conf_loss_single_image = torch.mean(max_prob_t)
+        conf_loss_union_image = torch.max(max_prob_t_union)
+        return conf_loss_single_image, conf_loss_union_image
 
 
 class TotalVariation(nn.Module):
@@ -252,6 +306,112 @@ class UnionDetector(nn.Module):
         attack_image_id = attack_image_id.type(torch.long)
         # use temperature parameter to make cross entropy loss converging more better
         predict_image_id = predict_image_id / 0.1
+        return predict_image_id, attack_image_id
+
+
+class UnionDetectorBCE(nn.Module):
+    def __init__(self):
+        super(UnionDetectorBCE, self).__init__()
+        self.config = patch_configs['base']()
+
+    def forward(self, model, image_batch, p_image_batch, people_boxes):
+        """
+        Args:
+            image_batch: [batch size,3,w,h]
+            p_image_batch: [batch size,3,w,h]
+            people_boxes: []
+        """
+        # stitching a.json square picture
+        w = int(self.config.batch_size)
+        # random choose 2 normal images and 2 adversarial images
+        image_index1 = [i for i in range(0, w)]
+        random.shuffle(image_index1)
+        image_index2 = [i for i in range(w, w * 2)]
+        random.shuffle(image_index2)
+        index_ = int(w / 2)
+        if index_ < 2:
+            index_ = 2
+        image_index = image_index1[:index_] + image_index2[:index_]
+        random.shuffle(image_index)
+        image_index = torch.tensor(image_index, device='cuda')
+        # choose image and cat the images according the image index
+        images = torch.cat((image_batch, p_image_batch), dim=0)  # [2 * batch size,3,h,w]
+        images = images[image_index]
+        union_image = torchvision.utils.make_grid(images, nrow=int(w ** (1 / 2)), padding=0)
+        # plt.imshow(np.array(functional.to_pil_image(union_image)))
+        # plt.show()
+
+        # adjust boxes coordinates
+        people_boxes = torch.cat((people_boxes, people_boxes), dim=0)  # [4,3,4] => [8,3,4]
+        people_boxes = people_boxes[image_index]  # => [4,3,4]
+        s = people_boxes.size()
+        people_boxes = people_boxes.reshape((s[0] * s[1], s[2]))
+        # people_boxes = torch.unbind(people_boxes, dim=0)
+        # people_boxes = torch.cat(people_boxes, dim=0)
+        people_boxes[:, 0] = people_boxes[:, 0] * self.config.img_size[0]
+        people_boxes[:, 1] = people_boxes[:, 1] * self.config.img_size[1]
+        for i in range(0, people_boxes.size(0)):
+            if torch.sum(people_boxes[i]) != 0:
+                people_boxes[i][0] = people_boxes[i][0] + (self.config.img_size[0]) * (
+                        i // self.config.max_lab % int(w ** (1 / 2)))
+                people_boxes[i][1] = people_boxes[i][1] + (self.config.img_size[1]) * (
+                        i // (self.config.max_lab * int(w ** (1 / 2))))
+        people_boxes[:, 0] = people_boxes[:, 0]
+        people_boxes[:, 1] = people_boxes[:, 1]
+        people_boxes[:, 2] = (self.config.img_size[0]) * people_boxes[:, 2]
+        people_boxes[:, 3] = (self.config.img_size[1]) * people_boxes[:, 3]  # [x,y,w,h]
+
+        # [x,y,w,h] => [x,y,x,y]
+        people_boxes[:, 0] = people_boxes[:, 0] - people_boxes[:, 2] / 2
+        people_boxes[:, 1] = people_boxes[:, 1] - people_boxes[:, 3] / 2
+        people_boxes[:, 2] = people_boxes[:, 0] + people_boxes[:, 2]
+        people_boxes[:, 3] = people_boxes[:, 1] + people_boxes[:, 3]
+
+        output = model(union_image)["instances"]
+        pred_classes = output.pred_classes
+        scores = output.scores
+        boxes = output.pred_boxes.tensor
+        people_scores = scores[pred_classes == 0]  # select people predict score
+        boxes = boxes[pred_classes == 0, :]
+
+        # calculate iou
+        attack_image_id = image_index.clone()
+        # 0 is normal image, 1 is attack image
+        attack_image_id[attack_image_id >= self.config.batch_size] = 1
+        attack_image_id[attack_image_id != 1] = 0
+        # [batch size] => [batch size, max boxes number] => [batch size * max boxes number]
+        attack_image_id = attack_image_id.unsqueeze(-1)
+        attack_image_id = attack_image_id.expand((-1, self.config.max_lab)).clone()
+        attack_image_id = attack_image_id.reshape(np.prod(attack_image_id.size()))
+        needed_boxes = people_boxes.clone()
+        needed_boxes = torch.sum(needed_boxes, dim=1)
+        attack_image_id = attack_image_id[needed_boxes != 0]
+
+        # init predicted image id
+        predict_image_id = torch.cuda.FloatTensor(attack_image_id.size()).fill_(1)
+        predict_image_id = torch.abs(predict_image_id - 1)
+        people_boxes = people_boxes[needed_boxes != 0]
+
+        for i in range(people_boxes.size(0)):
+            if len(boxes) == 0:
+                break
+            ixmin = torch.maximum(people_boxes[i][0], boxes[:, 0])
+            iymin = torch.maximum(people_boxes[i][1], boxes[:, 1])
+            ixmax = torch.minimum(people_boxes[i][2], boxes[:, 2])
+            iymax = torch.minimum(people_boxes[i][3], boxes[:, 3])
+            iw = torch.maximum(ixmax - ixmin + 1., torch.tensor(0., device='cuda'))
+            ih = torch.maximum(iymax - iymin + 1., torch.tensor(0., device='cuda'))
+            inters = iw * ih
+
+            # union
+            uni = ((people_boxes[i][2] - people_boxes[i][0] + 1.) * (people_boxes[i][3] - people_boxes[i][1] + 1.) +
+                   (boxes[:, 2] - boxes[:, 0] + 1.) *
+                   (boxes[:, 3] - boxes[:, 1] + 1.) - inters)
+            overlaps = 1 - torch.max(inters / uni)
+            # overlaps[1] = 1 - overlaps[1]
+            predict_image_id[i] = overlaps
+        attack_image_id = attack_image_id.type(torch.float)
+        # use temperature parameter to make cross entropy loss converging more better
         return predict_image_id, attack_image_id
 
 
@@ -414,6 +574,32 @@ class PatchEvaluator(nn.Module):
         ground_truths = copy.deepcopy(self.ground_truths)
         ap = self.calculator.ap(self.class_id, predicts, ground_truths, self.image_sizes, threshold=threshold)
         return ap
+
+    def save_visual_images(self, adv_patch, root_path, epoch):
+        file_name = f"{epoch}-"
+        index = random.randint(0, 10)
+        with torch.no_grad():
+            for id, (
+                    image_batch, clothes_boxes_batch, _, _, landmarks_batch, segmentations_batch) in enumerate(
+                tqdm(self.data_loader)):
+                if id != index:
+                    continue
+
+                image_batch = image_batch.cuda()
+                adv_patch = adv_patch.cuda()
+                adv_batch_t, adv_batch_mask_t = self.patch_transformer(adv_patch,
+                                                                       clothes_boxes_batch,
+                                                                       segmentations_batch,
+                                                                       landmarks_batch,
+                                                                       image_batch)
+                p_img_batch = self.patch_applier(image_batch, adv_batch_t, adv_batch_mask_t)
+                p_img_batch = F.interpolate(p_img_batch, (self.p_config.img_size[1], self.p_config.img_size[0]))
+                images = torch.unbind(p_img_batch, dim=0)
+                for idx, image in enumerate(images):
+                    path = os.path.join(root_path, file_name + str(idx) + '.jpg')
+                    save_predict_image_torch(self.model, image, path)
+                if id == index:
+                    break
 
     def inference_on_dataset(self, adv_patch):
         """
@@ -719,32 +905,23 @@ if __name__ == '__main__':
     warnings.filterwarnings("ignore")
     configs = patch_configs['base']()
     test_data = DataLoader(
-        ListDatasetAnn(configs.deepfooling_txt, range_=[0, 160]),
+        ListDatasetAnn(configs.deepfashion_txt, range_=[800, 880]),
         num_workers=1,
         batch_size=configs.batch_size
     )
     models = [FasterRCNN_R50_C4, FasterRCNN_R_50_DC5, FasterRCNN_R50_FPN, FasterRCNN_R_101_FPN, FasterRCNN, RetinaNet,
-              MaskRcnnX152]
-    images = os.listdir('./new_patches')
-    re = open('result.txt', 'w')
+              MaskRCNN]
+    images = ['R50_DC5.jpg', 'R50_FPN.jpg', 'R101_FPN.jpg', 'R50_C4.jpg']
     for image in images:
         print(image)
-        re.write('image: ' + str(image) + '\n')
-        path = os.path.join('/home/corona/attack/Fooling-Object-Detection-Network/new_patches', image)
+        path = os.path.join('/home/corona/attack/Fooling-Object-Detection-Network/patches', image)
         adv = Image.open(path)
-        adv = adv.resize((800, 800))
         adv = torchvision.transforms.functional.pil_to_tensor(adv) / 255.
-
         for item in models:
             model = item()
             patch_evaluator = PatchEvaluator(model, test_data)
             ap = patch_evaluator(adv, clean=False)
             print(ap)
-            re.write(str(ap) + '\n')
             del model, patch_evaluator
-
         print('=' * 50)
         print('=' * 50)
-        re.write('=' * 30)
-    re.close()
-

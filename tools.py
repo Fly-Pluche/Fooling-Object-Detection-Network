@@ -35,6 +35,11 @@ def predict_one_image(model, image, threshold=0.4):
     result = model.visual_instance_predictions(image, output, mode='pil', threshold=threshold)
     return result
 
+def save_predict_image_torch(model,image,path,threshold=0.4):
+    output = model(image)
+    result = model.visual_instance_predictions(image,output,mode='tensor',threshold=threshold)
+    result = cv2.cvtColor(result,cv2.COLOR_RGB2BGR)
+    cv2.imwrite(path,result)
 
 def predict_one_video(model, video_path, output_path, threshold=0.5):
     """
@@ -72,11 +77,12 @@ def predict_one_video(model, video_path, output_path, threshold=0.5):
 def get_data_loader():
     # load datasets
     config = patch_configs['base']()
-    datasets = ListDatasetAnn(config.deepfooling_txt, range_=[0, 160])
+    datasets = ListDatasetAnn(config.deepfashion_txt)
     data_loader = DataLoader(
         datasets,
         batch_size=1,
         num_workers=1,
+        shuffle=True,
     )
     return data_loader
 
@@ -108,6 +114,8 @@ def generate_attacked_results(adv_patch_cpu, config, data_loader, model):
     for image_batch, clothes_boxes_batch, people_boxes_batch, labels_batch, landmarks_batch, segmentations_batch in tqdm(
             data_loader):
         image_batch = image_batch.cuda()
+        labels_batch = labels_batch.cuda()
+        people_boxes_batch = people_boxes_batch.cuda()
         adv_batch_t, adv_batch_mask_t = patch_transformer(adv_patch,
                                                           clothes_boxes_batch,
                                                           segmentations_batch,
@@ -123,16 +131,16 @@ def generate_attacked_results(adv_patch_cpu, config, data_loader, model):
         with torch.no_grad():
             p_img_output = model(p_img)
             img_output = model(img)
-            # p_scores = p_img_output['instances'].scores
-            # scores = img_output['instances'].scores
-            # p_labels = p_img_output['instances'].pred_classes
-            # labels = p_img_output['instances'].pred_classes
+        # p_scores = p_img_output['instances'].scores
+        # scores = img_output['instances'].scores
+        # p_labels = p_img_output['instances'].pred_classes
+        # labels = p_img_output['instances'].pred_classes
 
-            p_img = model.visual_instance_predictions(p_img, p_img_output, threshold=0.8)
-            img = model.visual_instance_predictions(img, img_output, threshold=0.8)
+        p_img = model.visual_instance_predictions(p_img, p_img_output)
+        img = model.visual_instance_predictions(img, img_output)
 
-        cv2.imwrite('./outputs_new/' + str(i) + '_0.jpg', p_img[:, :, ::-1])
-        cv2.imwrite('./outputs_new/' + str(i) + '_1.jpg', img[:, :, ::-1])
+        cv2.imwrite('outputs/' + str(i) + '_0.jpg', p_img[:, :, ::-1])
+        cv2.imwrite('outputs/' + str(i) + '_1.jpg', img[:, :, ::-1])
         i += 1
         # plt.imshow(p_img)
         # # plt.imshow(np.array(functional.to_pil_image(p_img)))

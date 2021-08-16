@@ -19,6 +19,7 @@ from pytorchyolo.models import load_model
 from pytorchyolo.utils.utils import non_max_suppression
 from utils.utils import boxes_scale
 from utils.visualizer import Visualizer_
+import mmcv
 
 
 # import os
@@ -99,6 +100,7 @@ class MaskRCNN(BaseModel):
         model = "COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml"
         super(MaskRCNN, self).__init__(model)
 
+
 class MaskRCNN_PRO(BaseModel):
     def __init__(self):
         model = "Misc/cascade_mask_rcnn_X_152_32x8d_FPN_IN5k_gn_dconv.yaml"
@@ -165,12 +167,12 @@ class MaskRcnnX152(BaseModel):
 
 
 class Yolov3(BaseModel):
-    def __init__(self, model_path='config/yolov3.cfg', weights_path='weights/yolov3.weights'):
+    def __init__(self, model_path='config/yolov3.cfg', weights_path='weights/yolov3.weights', img_size=416):
         super(Yolov3, self).__init__(None)
         self.model_path = model_path
         self.weights_path = weights_path
         self.model = self.build()
-        self.img_size = 416
+        self.img_size = img_size
         self.conf_thres = 0.5
         self.nms_thres = 0.5
 
@@ -184,6 +186,7 @@ class Yolov3(BaseModel):
         input_img = input_img.type(torch.cuda.FloatTensor)
         # [[x1, y1, x2, y2, confidence, class]]
         detections = self.model(input_img)
+
         # nms
         detections = non_max_suppression(detections, self.conf_thres, self.nms_thres)[0]
         result = Instances((self.img_size, self.img_size))
@@ -191,11 +194,11 @@ class Yolov3(BaseModel):
         boxes = Boxes(pred_boxes)
         scores = detections[:, 4]
         pred_classes = detections[:, 5]
-        pred_classes = pred_classes.type(torch.int)
+        # pred_classes = pred_classes.type(torch.int)
 
-        result.set("pred_boxes", boxes)
-        result.set("pred_classes", pred_classes)
-        result.set("scores", scores)
+        result.set("pred_boxes", boxes.clone())
+        result.set("pred_classes", pred_classes.clone())
+        result.set("scores", scores.clone())
         return {"instances": result}
 
     def forward(self, image):
