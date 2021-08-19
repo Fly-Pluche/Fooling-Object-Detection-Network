@@ -5,8 +5,9 @@
       <sourceFolder url="file://$MODULE_DIR$" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/PyTorch-YOLOv3/pytorchyolo" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/PyTorch-YOLOv3" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/yolo" isTestSource="false" />
     </content>
-    <orderEntry type="jdk" jdkName="mist_work2" jdkType="Python SDK" />
+    <orderEntry type="jdk" jdkName="mist_work3" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
   </component>
   <component name="PyDocumentationSettings">
