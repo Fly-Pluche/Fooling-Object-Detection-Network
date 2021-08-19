@@ -21,7 +21,7 @@ PATH_SIZE = 500
         set the defaults
         """
         config = configparser.ConfigParser()
-        config.read('./config/mist.cfg')
+        config.read('./config/local.cfg')
         self.config_file = "/home/corona/attack/PaperCode/configs/yolo_person.cfg"
         self.weight_file = "/home/corona/attack/PyTorch-YOLOv3/good_weights/yolov3_ckpt_98.pth"
         self.txt_path = '/home/corona/datasets/WiderPerson/train/train2.txt'
@@ -29,7 +29,7 @@ PATH_SIZE = 500
         self.deepfooling_txt = config['DEFAULT']['DEEPFOOLING_TXT']
         self.patch_size = int(config['DEFAULT']['PATH_SIZE'])
         self.root_path = config['DEFAULT']['ROOT_PATH']
-        self.start_learning_rate = 0.03
+        self.start_learning_rate = 0.01
         self.patch_name = 'base'
         self.scheduler_factory = lambda x: optim.lr_scheduler.ReduceLROnPlateau(x, 'min', patience=50)
         self.batch_size = int(config['DEFAULT']['BATCH_SIZE'])

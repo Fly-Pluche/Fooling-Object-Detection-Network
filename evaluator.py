@@ -83,7 +83,7 @@ class MaxExtractor(nn.Module):
         # union_image = functional.resize()
         images = torch.unbind(batch_image, 0)
         people_boxes = self.tools.xywh2xyxy_batch_torch(people_boxes, self.config.img_size)
-        max_prob_t = torch.cuda.FloatTensor(batch_image.size(0)).fill_(0)
+        # max_prob_t = torch.cuda.FloatTensor(batch_image.size(0)).fill_(0)
         max_iou_t = torch.cuda.FloatTensor(batch_image.size(0)).fill_(0)
         for i, image in enumerate(images):
             output = model(image)["instances"]
@@ -115,11 +115,13 @@ class MaxExtractor(nn.Module):
                 iou_max = torch.max(iou_max, overlaps)
 
             if len(people_scores) != 0:
-                max_prob = torch.max(people_scores)
-                max_prob = max_prob + 1
-                max_prob = torch.sqrt(max_prob)
-                max_prob_t[i] = max_prob
                 max_iou_t[i] = iou_max
+
+        union_detect = model(union_image)['instances']
+        labels = union_detect.pred_classes
+        max_prob_t_union = union_detect[labels == 0].scores
+        max_prob_t = torch.max(max_prob_t_union)
+        max_iou_t = torch.mean(max_iou_t)
         return max_prob_t, max_iou_t
 
 

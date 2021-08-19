@@ -9,7 +9,7 @@ from torch.utils.tensorboard import SummaryWriter
 from torchvision import transforms
 from tqdm import tqdm
 
-from evaluator import TotalVariation, UnionDetectorBCE, ConfMaxExtractor
+from evaluator import TotalVariation, UnionDetectorBCE, ConfMaxExtractor, MaxExtractor
 from evaluator import PatchEvaluator
 from load_data import ListDatasetAnn
 from models import *
@@ -34,15 +34,15 @@ class PatchTrainer(object):
         self.config = patch_configs['base']()  # load base config
         # self.model_ = Yolov3(img_size=self.config.img_size[0])
         # self.name = 'Yolov3'
-        self.model_ = RetinaNet()
-        self.name = 'RetinaNet_without_iou_loss'
+        self.model_ = FasterRCNN()
+        self.name = 'FasterRCNN'
         self.log_path = self.config.log_path
         self.writer = self.init_tensorboard(name='base')
         os.mkdir(os.path.join(self.log_path, 'visual_image'))
         self.image_save_path = os.path.join(self.log_path, 'visual_image')
         self.patch_transformer = PatchTransformerPro().cuda()
         self.patch_applier = PatchApplierPro().cuda()
-        self.max_extractor = ConfMaxExtractor().cuda()
+        self.max_extractor = MaxExtractor().cuda()
         self.total_variation = TotalVariation().cuda()
         self.union_detector = UnionDetectorBCE().cuda()
         self.patch_evaluator = None
@@ -88,11 +88,11 @@ class PatchTrainer(object):
 
         # Parameters to initialize some dynamically updated weights
         N = 4
-        w_conf_single = 1
+        w_iou = 1
         w_conf_union = 1
         w_tv = 1
         w_union_attack = 1
-        last_conf_single_loss = -1
+        last_iou_loss = -1
         last_conf_union_loss = -1
         last_tv_loss = -1
         last_union_attack_loss = -1
@@ -100,7 +100,7 @@ class PatchTrainer(object):
         # start training 
         min_ap = 1
         for epoch in range(10000):
-            ep_conf_loss = 0
+            ep_iou_all = 0
             ep_conf_union_loss = 0
             ep_union_loss = 0
             ep_tv_loss = 0
@@ -128,46 +128,46 @@ class PatchTrainer(object):
                 p_img_batch = F.interpolate(p_img_batch, (self.config.img_size[1], self.config.img_size[0]))
 
                 # calculate each part of the loss
-                conf_loss_single_image, conf_loss_union_image = self.max_extractor(self.model_, p_img_batch)
+                conf_loss_union_image, iou_loss = self.max_extractor(self.model_, p_img_batch, people_boxes_batch)
                 tv_loss = self.total_variation(adv_patch)
                 predicted_id, attack_id = self.union_detector(self.model_, image_batch, p_img_batch, people_boxes_batch)
                 union_attack_loss = self.entropy(predicted_id, attack_id)
 
                 print()
-                print('conf_loss_single_image: ', conf_loss_single_image)
+                print('iou_loss: ', iou_loss)
                 print('conf_loss_union_image', conf_loss_union_image)
                 print("union_attack_loss", union_attack_loss)
 
                 # Dynamic update weight parameter
                 with torch.no_grad():
-                    if last_conf_single_loss != -1:
-                        r_conf_single = conf_loss_single_image / last_conf_single_loss
+                    if last_iou_loss != -1:
+                        r_conf_single = iou_loss / last_iou_loss
                         r_conf_union = conf_loss_union_image / last_conf_union_loss
                         r_tv = tv_loss / last_tv_loss
                         r_union = union_attack_loss / last_union_attack_loss
                         rs = torch.stack([r_conf_single, r_conf_union, r_tv, r_union])
                         rs = torch.exp(rs)
                         sum_rs = torch.sum(rs)
-                        w_conf_single = (N * rs[0]) / sum_rs
+                        w_iou = (N * rs[0]) / sum_rs
                         w_conf_union = N * rs[1] / sum_rs
                         w_tv = N * rs[2] / sum_rs
                         w_union_attack = N * rs[3] / sum_rs
 
-                # loss = w_conf_single * conf_loss_single_image + w_conf_union * conf_loss_union_image + w_tv * tv_loss + w_union_attack * union_attack_loss
-                # loss = conf_loss_single_image
+                loss = w_iou * iou_loss + w_conf_union * conf_loss_union_image + w_tv * tv_loss + w_union_attack * union_attack_loss
+                # loss = iou_loss
                 # loss = conf_loss_union_image
                 # loss = conf_loss_union_image
                 # loss = union_attack_loss
-                loss = w_conf_union * conf_loss_union_image + w_tv * tv_loss
+                # loss = w_conf_union * conf_loss_union_image + w_tv * tv_loss
 
                 # update last loss
-                last_conf_single_loss = conf_loss_single_image.detach()
+                last_iou_loss = iou_loss.detach()
                 last_conf_union_loss = conf_loss_union_image.detach()
                 last_tv_loss = tv_loss.detach()
                 last_union_attack_loss = union_attack_loss.detach()
 
                 # evaluate
-                ep_conf_loss += conf_loss_single_image.detach().cpu().numpy()
+                ep_iou_all += iou_loss.detach().cpu().numpy()
                 ep_conf_union_loss += conf_loss_union_image.detach().cpu().numpy()
                 ep_union_loss += union_attack_loss.detach().cpu().numpy()
                 ep_tv_loss += tv_loss.detach().cpu().numpy()
@@ -182,7 +182,7 @@ class PatchTrainer(object):
                 if i_batch % 23 == 0:
                     iteration = epoch_length * epoch + i_batch
                     self.writer.add_scalar('total_loss', loss.detach().cpu().numpy(), iteration)
-                    self.writer.add_scalar('loss/conf_loss_single_image', conf_loss_single_image.detach().cpu().numpy(),
+                    self.writer.add_scalar('loss/iou_loss', iou_loss.detach().cpu().numpy(),
                                            iteration)
                     self.writer.add_scalar('loss/conf_loss_union_image', conf_loss_union_image.detach().cpu().numpy(),
                                            iteration)
@@ -190,7 +190,7 @@ class PatchTrainer(object):
                     self.writer.add_image('patch', adv_patch.cpu(), iteration)
                     # self.writer.add_image('patch', adv_patch.detach().cpu(), iteration)
 
-                del adv_batch_t, p_img_batch, adv_batch_mask_t, conf_loss_union_image, conf_loss_single_image, tv_loss,
+                del adv_batch_t, p_img_batch, adv_batch_mask_t, conf_loss_union_image, iou_loss, tv_loss,
                 torch.cuda.empty_cache()
 
             # visual attack effection
@@ -220,7 +220,7 @@ class PatchTrainer(object):
                         adv_cmyk = functional.to_pil_image(adv_cmyk)
                         adv_cmyk.save(name2)
 
-            ep_conf_loss = ep_conf_loss / len(train_data)
+            ep_iou_all = ep_iou_all / len(train_data)
             ep_conf_union_loss = ep_conf_union_loss / len(train_data)
             ep_union_loss = ep_union_loss / len(train_data)
             ep_tv_loss = ep_tv_loss / len(train_data)
@@ -231,13 +231,13 @@ class PatchTrainer(object):
                 print('| EPOCH NR: ', epoch),
                 print('| EPOCH LOSS: ', ep_loss)
                 print("| AP: ", ap)
-                self.writer.add_scalar('ep_conf_loss', ep_conf_loss, epoch)
+                self.writer.add_scalar('ep_iou_all', ep_iou_all, epoch)
                 self.writer.add_scalar('ep_conf_union_loss', ep_conf_union_loss, epoch)
                 self.writer.add_scalar('ep_union_loss', ep_union_loss, epoch)
                 self.writer.add_scalar('ep_loss', ep_loss, epoch)
                 self.writer.add_scalar('AP', ap, epoch)
 
-            print('| ep_conf_loss: ', ep_conf_loss)
+            print('| ep_iou_all: ', ep_iou_all)
             print('| ep_tv_loss: ', ep_tv_loss)
             print('| ep_conf_union_loss:', ep_conf_union_loss)
             print('| ep_union_loss', ep_union_loss)

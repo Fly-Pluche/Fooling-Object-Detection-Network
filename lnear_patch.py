@@ -28,7 +28,7 @@ np.random.seed(2233)
 
 # train
 torch.autograd.set_detect_anomaly(True)
-yolov3 = Yolov3('./config/yolov3.cfg', './weights/yolov3.weights')
+yolov3 = Yolov3('./config/yolov3.cfg', './weights/yolo.weights')
 points = torch.rand(2, 1000)
 points[points < 0] = points[points < 0] * -1
 points = points * 415

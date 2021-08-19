@@ -60,7 +60,7 @@ def _create_data_loader(img_path, batch_size, img_size, n_cpu, multiscale_traini
 def run():
     print_environment_info()
     parser = argparse.ArgumentParser(description="Trains the YOLO model.")
-    parser.add_argument("-m", "--model", type=str, default="config/yolov3.cfg", help="Path to model definition file (.cfg)")
+    parser.add_argument("-m", "--model", type=str, default="config/yolo.cfg", help="Path to model definition file (.cfg)")
     parser.add_argument("-d", "--data", type=str, default="config/coco.data", help="Path to data config file (.data)")
     parser.add_argument("-e", "--epochs", type=int, default=300, help="Number of epochs")
     parser.add_argument("-v", "--verbose", action='store_true', help="Makes the training more verbose")
