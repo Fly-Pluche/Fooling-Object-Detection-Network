@@ -158,7 +158,7 @@ class PatchTrainer(object):
                 # loss = conf_loss_union_image
                 # loss = conf_loss_union_image
                 # loss = union_attack_loss
-                loss = w_conf_union * conf_loss_union_image + w_tv * tv_loss
+                loss = w_conf_single * w_conf_single + w_tv * tv_loss
 
                 # update last loss
                 last_conf_single_loss = conf_loss_single_image.detach()

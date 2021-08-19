@@ -158,7 +158,7 @@ class PatchTransformer(nn.Module):
         off_y = target_off_y * (torch.cuda.FloatTensor(target_off_y.size()).uniform_(-0.1, 0.1))
         target_y = target_y + off_y
         target_y = target_y - 0.01
-        target_size = target_size * 0.8
+        target_size = target_size * 1.0
         scale = target_size / current_patch_size
         scale = scale.view(angle_size)
 

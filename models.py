@@ -19,7 +19,7 @@ from pytorchyolo.models import load_model
 from pytorchyolo.utils.utils import non_max_suppression
 from utils.utils import boxes_scale
 from utils.visualizer import Visualizer_
-import mmcv
+# import mmcv
 
 
 # import os
