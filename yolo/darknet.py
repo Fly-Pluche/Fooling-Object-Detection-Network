@@ -9,6 +9,9 @@ from utils import *
 import cv2
 
 
+
+
+
 def get_test_input(img_path):
     img = cv2.imread(img_path)
     img = cv2.resize(img, (608, 608))
@@ -291,10 +294,10 @@ class Darknet(nn.Module):
 
 if __name__ == '__main__':
     blocks = parse_cfg('cfg/yolov3.cfg')
-    print(create_modules(blocks))
+    # print(create_modules(blocks))
     model = Darknet('cfg/yolov3.cfg').cuda()
     model.load_weights('yolov3.weights')
     inp = get_test_input('dog-cycle-car.png').cuda()
     pred = model(inp, torch.cuda.is_available())
-    print(pred)
-    print(pred.size())
+    a = write_results(pred, 0.8, 80)
+    print(a)

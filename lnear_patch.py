@@ -19,6 +19,7 @@ from utils.utils import imshow
 import warnings
 import cv2
 from patch import *
+
 warnings.filterwarnings('ignore')
 
 # set random seed
@@ -57,7 +58,5 @@ for i in tqdm(range(200000000)):
         if i % 1000 == 0:
             img = np.asarray(functional.to_pil_image(image.cpu()))
             cv2.imwrite(f"./linear/{i}.jpg", img)
-        del points_cuda, image, result, loss_classes,classes,boxes
+        del points_cuda, image, result, loss_classes, classes, boxes
         torch.cuda.empty_cache()
-
-

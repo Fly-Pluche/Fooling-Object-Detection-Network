@@ -8,3 +8,5 @@ weights
 coco
 vedios
 deepfooling
+*.pth
+*.whl

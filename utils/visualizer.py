@@ -136,9 +136,10 @@ class Visualizer_(Visualizer):
         boxes = boxes[scores >= self.threshold]
         classes = classes[scores >= self.threshold]
         scores = scores[scores >= self.threshold]
-        boxes = boxes[classes < 13]
-        scores = scores[classes < 13]
-        classes = classes[classes < 13]
+        boxes = boxes[classes < 21]
+        scores = scores[classes < 21]
+        classes = classes[classes < 21]
+        classes = classes.int()
         labels = _create_text_labels(classes, scores, self.metadata.get("thing_classes", None))
         alpha = 0.5
         colors = [

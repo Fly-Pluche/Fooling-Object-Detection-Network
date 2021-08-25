@@ -68,8 +68,11 @@
       <paths name="ray@10.12.1.147:22 password">
         <serverdata>
           <mappings>
-            <mapping deploy="/home/ray/workspace/coronapolvo/attack" local="$PROJECT_DIR$" />
+            <mapping deploy="/home/disk2/ray/workspace/coronapolvo/attack" local="$PROJECT_DIR$" />
           </mappings>
+          <excludedPaths>
+            <excludedPath path="/home/disk2/ray/workspace/coronapolvo/attack/net/yolov3/model_data/yolo_weight_voc_608.pth" />
+          </excludedPaths>
         </serverdata>
       </paths>
     </serverData>

@@ -35,11 +35,14 @@ def predict_one_image(model, image, threshold=0.4):
     result = model.visual_instance_predictions(image, output, mode='pil', threshold=threshold)
     return result
 
-def save_predict_image_torch(model,image,path,threshold=0.4):
-    output = model(image)
-    result = model.visual_instance_predictions(image,output,mode='tensor',threshold=threshold)
-    result = cv2.cvtColor(result,cv2.COLOR_RGB2BGR)
-    cv2.imwrite(path,result)
+
+def save_predict_image_torch(model, image, path, threshold=0.4):
+    output = model(image.clone(), nms=True)
+    print(output)
+    result = model.visual_instance_predictions(image, output, mode='tensor', threshold=threshold)
+    result = cv2.cvtColor(result, cv2.COLOR_RGB2BGR)
+    cv2.imwrite(path, result)
+
 
 def predict_one_video(model, video_path, output_path, threshold=0.5):
     """
