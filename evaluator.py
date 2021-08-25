@@ -25,8 +25,8 @@ import random
 import os
 from tools import save_predict_image_torch
 
+os.environ["CUDA_VISIBLE_DEVICES"] = "2"
 
-# os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
 class MaxProbExtractor(nn.Module):
     """
@@ -42,8 +42,8 @@ class MaxProbExtractor(nn.Module):
         for i, image in enumerate(images):
             output = model(image)["instances"]
             pred_classes = output.pred_classes
-            scores = output.scores
-            people_scores = scores[pred_classes == 0]  # select people predict score
+            scores = output.obj_conf
+            people_scores = scores[pred_classes == model.people_index]  # select people predict score
             if len(people_scores) != 0:
                 max_prob = torch.max(people_scores)
                 max_prob_t[i] = max_prob
@@ -90,7 +90,7 @@ class MaxExtractor(nn.Module):
             pred_classes = output.pred_classes
             scores = output.scores
             boxes = output.pred_boxes.tensor
-            people_scores = scores[pred_classes == 0]  # select people predict score
+            people_scores = scores[pred_classes == model.people_index]  # select people predict score
             boxes = boxes[pred_classes == 0]
             iou_max = torch.tensor(0., device='cuda')
             gt_boxes = people_boxes[i]
@@ -123,6 +123,62 @@ class MaxExtractor(nn.Module):
         max_prob_t = torch.max(max_prob_t_union)
         max_iou_t = torch.mean(max_iou_t)
         return max_prob_t, max_iou_t
+
+
+class DetMaxExtractor(nn.Module):
+    """
+    get the max score
+    """
+
+    def __init__(self):
+        super(DetMaxExtractor, self).__init__()
+        self.config = patch_configs['base']()
+        self.tools = ParseTools()
+
+    def forward(self, model, batch_image):
+        """
+        Args:
+            model: the model used to predict
+            batch_image: a.json batch of images [batch size, 3, width, height]
+        """
+        # make a union image: concat a batch of images
+        # [4,3,600,600] => [3,1200,1200]
+        union_image = torchvision.utils.make_grid(batch_image, padding=0, nrow=2)
+        # resize union image
+        theta = torch.tensor([
+            [1, 0, 0.],
+            [0, 1, 0.]
+        ], dtype=torch.float).cuda()
+        N, C, W, H = union_image.unsqueeze(0).size()
+        size = torch.Size((N, C, W // 2, H // 2))
+        grid = F.affine_grid(theta.unsqueeze(0), size)
+        output = F.grid_sample(union_image.unsqueeze(0), grid)
+        union_image = output.squeeze(0)
+        # plt.imshow(np.array(functional.to_pil_image(union_image)))
+        # plt.show()
+        # union_image = functional.resize()
+
+        # unbind images
+        images = torch.unbind(batch_image, 0)
+
+        # init max conf loss
+        max_prob_t = torch.cuda.FloatTensor(batch_image.size(0)).fill_(0)
+        for i, image in enumerate(images):
+            output = model(image)["instances"]
+            pred_classes = output.pred_classes
+            scores = output.obj_conf
+            people_scores = scores[pred_classes == 0]  # select people predict score
+            if len(people_scores) != 0:
+                max_prob = torch.max(people_scores)
+                max_prob_t[i] = max_prob
+        union_detect = model(union_image)['instances']
+        labels = union_detect.pred_classes
+        max_prob_t_union = union_detect[labels == model.people_index].obj_conf
+
+        # calculate two parts of conf loss
+        conf_loss_single_image = torch.mean(max_prob_t)
+        conf_loss_union_image = torch.max(max_prob_t_union)
+        return conf_loss_single_image, conf_loss_union_image
 
 
 class ConfMaxExtractor(nn.Module):
@@ -173,7 +229,7 @@ class ConfMaxExtractor(nn.Module):
                 max_prob_t[i] = max_prob
         union_detect = model(union_image)['instances']
         labels = union_detect.pred_classes
-        max_prob_t_union = union_detect[labels == 0].scores
+        max_prob_t_union = union_detect[labels == model.people_index].scores
 
         # calculate two parts of conf loss
         conf_loss_single_image = torch.mean(max_prob_t)
@@ -263,8 +319,8 @@ class UnionDetector(nn.Module):
         pred_classes = output.pred_classes
         scores = output.scores
         boxes = output.pred_boxes.tensor
-        people_scores = scores[pred_classes == 0]  # select people predict score
-        boxes = boxes[pred_classes == 0, :]
+        people_scores = scores[pred_classes == model.people_index]  # select people predict score
+        boxes = boxes[pred_classes == model.people_index, :]
 
         # calculate iou
         attack_image_id = image_index.clone()
@@ -373,8 +429,8 @@ class UnionDetectorBCE(nn.Module):
         pred_classes = output.pred_classes
         scores = output.scores
         boxes = output.pred_boxes.tensor
-        people_scores = scores[pred_classes == 0]  # select people predict score
-        boxes = boxes[pred_classes == 0, :]
+        people_scores = scores[pred_classes == model.people_index]  # select people predict score
+        boxes = boxes[pred_classes == model.people_index, :]
 
         # calculate iou
         attack_image_id = image_index.clone()
@@ -534,14 +590,15 @@ class PatchEvaluator(nn.Module):
         self.predicts = None
         self.ground_truths = None
         self.image_sizes = None
+        self.class_id = 0  # the class you want to calculate ap
         self.register_dataset(model, data_loader)
         self.patch_transformer = PatchTransformerPro().cuda()
         self.patch_applier = PatchApplierPro().cuda()
-        self.class_id = 0  # the class you want to calculate ap
 
     def register_dataset(self, model, data_loader):
         self.data_loader = data_loader
         self.model = model
+        self.class_id = self.model.people_index
         self.ground_truths = self.get_people_dicts(data_loader)
 
     # get people dicts from pytorch data loader
@@ -569,15 +626,12 @@ class PatchEvaluator(nn.Module):
         return dataset_dicts
 
     def forward(self, adv_patch, threshold=0.5, clean=False):
-        if not clean:
-            predicts = self.inference_on_dataset(adv_patch)
-        else:
-            predicts = self.inference_on_dataset_clean()
+        predicts = self.inference_on_dataset(adv_patch, clean)
         ground_truths = copy.deepcopy(self.ground_truths)
         ap = self.calculator.ap(self.class_id, predicts, ground_truths, self.image_sizes, threshold=threshold)
         return ap
 
-    def save_visual_images(self, adv_patch, root_path, epoch):
+    def save_visual_images(self, adv_patch, root_path, epoch, clean=False):
         file_name = f"{epoch}-"
         index = random.randint(0, 10)
         with torch.no_grad():
@@ -588,14 +642,17 @@ class PatchEvaluator(nn.Module):
                     continue
 
                 image_batch = image_batch.cuda()
-                adv_patch = adv_patch.cuda()
-                adv_batch_t, adv_batch_mask_t = self.patch_transformer(adv_patch,
-                                                                       clothes_boxes_batch,
-                                                                       segmentations_batch,
-                                                                       landmarks_batch,
-                                                                       image_batch)
-                p_img_batch = self.patch_applier(image_batch, adv_batch_t, adv_batch_mask_t)
-                p_img_batch = F.interpolate(p_img_batch, (self.p_config.img_size[1], self.p_config.img_size[0]))
+                if not clean:
+                    adv_patch = adv_patch.cuda()
+                    adv_batch_t, adv_batch_mask_t = self.patch_transformer(adv_patch,
+                                                                           clothes_boxes_batch,
+                                                                           segmentations_batch,
+                                                                           landmarks_batch,
+                                                                           image_batch)
+                    p_img_batch = self.patch_applier(image_batch, adv_batch_t, adv_batch_mask_t)
+                else:
+                    p_img_batch = image_batch
+                p_img_batch = F.interpolate(p_img_batch, (self.p_config.img_size[0], self.p_config.img_size[1]))
                 images = torch.unbind(p_img_batch, dim=0)
                 for idx, image in enumerate(images):
                     path = os.path.join(root_path, file_name + str(idx) + '.jpg')
@@ -603,7 +660,7 @@ class PatchEvaluator(nn.Module):
                 if id == index:
                     break
 
-    def inference_on_dataset(self, adv_patch):
+    def inference_on_dataset(self, adv_patch, clean):
         """
         Run model on the data_loader and evaluate the metrics with evaluator.
         Also benchmark the inference speed of `model.forward` accurately.
@@ -620,17 +677,20 @@ class PatchEvaluator(nn.Module):
                 clothes_boxes_batch = clothes_boxes_batch.cuda()
                 landmarks_batch = landmarks_batch.cuda()
                 segmentations_batch = segmentations_batch.cuda()
-                adv_patch = adv_patch.cuda()
-                adv_batch_t, adv_batch_mask_t = self.patch_transformer(adv_patch,
-                                                                       clothes_boxes_batch,
-                                                                       segmentations_batch,
-                                                                       landmarks_batch,
-                                                                       image_batch)
-                p_img_batch = self.patch_applier(image_batch, adv_batch_t, adv_batch_mask_t)
+                if not clean:
+                    adv_patch = adv_patch.cuda()
+                    adv_batch_t, adv_batch_mask_t = self.patch_transformer(adv_patch,
+                                                                           clothes_boxes_batch,
+                                                                           segmentations_batch,
+                                                                           landmarks_batch,
+                                                                           image_batch)
+                    p_img_batch = self.patch_applier(image_batch, adv_batch_t, adv_batch_mask_t)
+                else:
+                    p_img_batch = image_batch
                 p_img_batch = F.interpolate(p_img_batch, (self.p_config.img_size[1], self.p_config.img_size[0]))
                 images = torch.unbind(p_img_batch, dim=0)
                 for idx, image in enumerate(images):
-                    outputs = self.model(image)
+                    outputs = self.model(image, nms=True)
                     # a.json = model.visual_instance_predictions(image, outputs)
                     # plt.imshow(a.json)
                     # plt.show()
@@ -905,25 +965,58 @@ if __name__ == '__main__':
     import warnings
 
     warnings.filterwarnings("ignore")
-    configs = patch_configs['base']()
+    config = patch_configs['base']()
     test_data = DataLoader(
-        ListDatasetAnn(configs.deepfashion_txt, range_=[800, 880]),
-        num_workers=1,
-        batch_size=configs.batch_size
+        ListDatasetAnn(config.deepfooling_txt, range_=[0, 80]),
+        num_workers=4,
+        batch_size=config.batch_size,
+        shuffle=False
     )
-    models = [FasterRCNN_R50_C4, FasterRCNN_R_50_DC5, FasterRCNN_R50_FPN, FasterRCNN_R_101_FPN, FasterRCNN, RetinaNet,
-              MaskRCNN]
-    images = ['R50_DC5.jpg', 'R50_FPN.jpg', 'R101_FPN.jpg', 'R50_C4.jpg']
-    for image in images:
-        print(image)
-        path = os.path.join('/home/corona/attack/Fooling-Object-Detection-Network/patches', image)
-        adv = Image.open(path)
-        adv = torchvision.transforms.functional.pil_to_tensor(adv) / 255.
-        for item in models:
-            model = item()
-            patch_evaluator = PatchEvaluator(model, test_data)
-            ap = patch_evaluator(adv, clean=False)
-            print(ap)
-            del model, patch_evaluator
-        print('=' * 50)
-        print('=' * 50)
+    model = Yolov3(model_path='net/yolov3/logs/Epoch10-Total_Loss11.4261-Val_Loss10.1546.pth', image_size=608)
+    # model = Yolov3(model_path='model_data/yolo_weights.pth', image_size=416, classes_path='model_data/coco_classes.txt')
+    model.set_image_size(config.img_size[0])
+    # model.save
+    patch_evaluator = PatchEvaluator(model, test_data)
+    from PIL import Image
+
+    adv = Image.open('./patches/1.jpg')
+    adv = functional.pil_to_tensor(adv) / 255.0
+    adv = adv.cuda()
+    patch_evaluator.save_visual_images(adv, './images/yolo_output', 1, clean=False)
+
+    ap = patch_evaluator(adv, clean=True)
+
+
+    # model.set_image_size(config.img_size[0])
+
+    # models = [FasterRCNN_R50_C4, FasterRCNN_R_50_DC5, FasterRCNN_R50_FPN, FasterRCNN_R_101_FPN, FasterRCNN, RetinaNet,
+    #           MaskRCNN]
+    # images = ['R50_DC5.jpg', 'R50_FPN.jpg', 'R101_FPN.jpg', 'R50_C4.jpg']
+    # for image in images:
+    #     print(image)
+    #     path = os.path.join('/home/corona/attack/Fooling-Object-Detection-Network/patches', image)
+    #     adv = Image.open(path)
+    #     adv = torchvision.transforms.functional.pil_to_tensor(adv) / 255.
+    #     for item in models:
+    #         model = item()
+    #         patch_evaluator = PatchEvaluator(model, test_data)
+    #         ap = patch_evaluator(adv, clean=False)
+    #         print(ap)
+    #         del model, patch_evaluator
+    #     print('=' * 50)
+    #     print('=' * 50)
+    # import cv2
+    #
+    # # model = FasterRCNN()
+    # img = 'images/aaa.jpg'
+    # img = cv2.imread(img)
+    # # a = model.default_predictor_(img)['instances']
+    # # box = a.pred_boxes.tensor
+    # # print(box.size())
+    # # print(box)
+    # img = functional.to_tensor(img)
+    # # print(img)
+    # model = Yolov3(model_path='net/yolov3/logs/Epoch10-Total_Loss11.4261-Val_Loss10.1546.pth', image_size=608)
+    # model.set_image_size(717)
+    # result = model(img.cuda(), nms=True)
+    # print(result)
