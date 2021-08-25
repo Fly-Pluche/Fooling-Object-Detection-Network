@@ -251,9 +251,9 @@ def _create_data_loader(img_path, batch_size, img_size, n_cpu):
 def run():
     print_environment_info()
     parser = argparse.ArgumentParser(description="Detect objects on images.")
-    parser.add_argument("-m", "--model", type=str, default="config/yolov3.cfg",
+    parser.add_argument("-m", "--model", type=str, default="config/yolo.cfg",
                         help="Path to model definition file (.cfg)")
-    parser.add_argument("-w", "--weights", type=str, default="weights/yolov3.weights",
+    parser.add_argument("-w", "--weights", type=str, default="weights/yolo.weights",
                         help="Path to weights or checkpoint file (.weights or .pth)")
     parser.add_argument("-i", "--images", type=str, default="data/samples",
                         help="Path to directory with images to inference")
@@ -285,7 +285,7 @@ def run():
 
 
 class Yolov3(torch.nn.Module):
-    def __init__(self, model_path='config/yolov3.cfg', weights_path='weights/yolov3.weights'):
+    def __init__(self, model_path='config/yolo.cfg', weights_path='weights/yolo.weights'):
         super(Yolov3, self).__init__()
         self.model_path = model_path
         self.weights_path = weights_path
@@ -313,7 +313,7 @@ class Yolov3(torch.nn.Module):
 
 if __name__ == '__main__':
     # run()
-    yolov3 = Yolov3('../config/yolov3.cfg', '../weights/yolov3.weights')
+    yolov3 = Yolov3('../config/yolov3.cfg', '../weights/yolo.weights')
     # img = np.array(Image.open('../data/samples/dog.jpg'))
     img = Image.open('../data/samples/dog.jpg')
     img = functional.pil_to_tensor(img)

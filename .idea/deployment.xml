@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
-  <component name="PublishConfigData" autoUpload="Always" serverName="corona@10.0.0.12:22 password" remoteFilesAllowedToDisappearOnAutoupload="false" showDialogOnRemoteDnD="false" autoUploadExternalChanges="true" showAutoUploadSettingsWarning="false">
+  <component name="PublishConfigData" autoUpload="Always" serverName="ray@10.12.1.147:22 password" remoteFilesAllowedToDisappearOnAutoupload="false" showDialogOnRemoteDnD="false" autoUploadExternalChanges="true" showAutoUploadSettingsWarning="false">
     <serverData>
       <paths name="corona@10.0.0.12:22 password">
         <serverdata>
@@ -62,6 +62,13 @@
         <serverdata>
           <mappings>
             <mapping deploy="/home/corona/attack/Fooling-Object-Detection-Network" local="$PROJECT_DIR$" web="/" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="ray@10.12.1.147:22 password">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/home/ray/workspace/coronapolvo/attack" local="$PROJECT_DIR$" />
           </mappings>
         </serverdata>
       </paths>

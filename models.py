@@ -167,7 +167,7 @@ class MaskRcnnX152(BaseModel):
 
 
 class Yolov3(BaseModel):
-    def __init__(self, model_path='config/yolov3.cfg', weights_path='weights/yolov3.weights', img_size=416):
+    def __init__(self, model_path='config/yolo.cfg', weights_path='weights/yolo.weights', img_size=416):
         super(Yolov3, self).__init__(None)
         self.model_path = model_path
         self.weights_path = weights_path
@@ -178,7 +178,7 @@ class Yolov3(BaseModel):
 
     def predictor(self, image):
         """
-        use yolov3 model to predict
+        use yolo model to predict
         input: torch tensor [1,3,w,h], Pixel value range [0,1]
         """
         # resize the input image
@@ -232,7 +232,7 @@ class Yolov3(BaseModel):
 
 
 if __name__ == '__main__':
-    yolov3 = Yolov3('./config/yolov3.cfg', './weights/yolov3.weights')
+    yolov3 = Yolov3('./config/yolov3.cfg', './weights/yolo.weights')
     img = Image.open('./data/samples/dog.jpg')
     # img = functional.pil_to_tensor(img) / 255.0
     output = yolov3.default_predictor(img)
