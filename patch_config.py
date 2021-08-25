@@ -7,13 +7,13 @@ import configparser
 class BaseConfig(object):
     """
     Default parameters for all config files
-ROOT_PATH = /home/mist/deepfooling
-IMG_SIZE = 1000
-IMG_SIZE_BIG = 1500
-LOG_PATH = /home/mist/logs
-SAVE_ADV_PATCH_PATH = /home/mist/deepfooling/train.txt
-DEEPFOOLING_TXT = /home/mist/deepfooling
-PATH_SIZE = 500
+    ROOT_PATH = /home/mist/deepfooling
+    IMG_SIZE = 1000
+    IMG_SIZE_BIG = 1500
+    LOG_PATH = /home/mist/logs
+    SAVE_ADV_PATCH_PATH = /home/mist/deepfooling/train.txt
+    DEEPFOOLING_TXT = /home/mist/deepfooling
+    PATH_SIZE = 500
     """
 
     def __init__(self):
@@ -29,7 +29,7 @@ PATH_SIZE = 500
         self.deepfooling_txt = config['DEFAULT']['DEEPFOOLING_TXT']
         self.patch_size = int(config['DEFAULT']['PATH_SIZE'])
         self.root_path = config['DEFAULT']['ROOT_PATH']
-        self.start_learning_rate = 0.01
+        self.start_learning_rate = 0.03
         self.patch_name = 'base'
         self.scheduler_factory = lambda x: optim.lr_scheduler.ReduceLROnPlateau(x, 'min', patience=50)
         self.batch_size = int(config['DEFAULT']['BATCH_SIZE'])
@@ -41,7 +41,16 @@ PATH_SIZE = 500
         self.max_lab = 3
         self.log_path = config['DEFAULT']['LOG_PATH']
         self.is_cmyk = int(config['DEFAULT']['IS_CMYK'])
-
+        self.optim = config['DEFAULT']['OPTIM']
+        self.patch_scale = float(config['DEFAULT']['PATCH_SCALE'])
+        if self.optim == 'adam':
+            self.start_learning_rate = 0.03
+        else:
+            self.start_learning_rate = 32 / 255.
+        self.model_path = config['DEFAULT']['MODEL_PATH']
+        self.model_image_size = int(config['DEFAULT']['MODEL_IMAGE_SIZE'])
+        self.classes_path = config['DEFAULT']['CLASSES_PATH']
+        self.detail_info = config['DEFAULT']['INFO']
 
 
 class Experiment1(BaseConfig):
