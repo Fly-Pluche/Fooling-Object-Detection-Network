@@ -24,6 +24,7 @@ from torchvision.transforms import functional
 import random
 import os
 from tools import save_predict_image_torch
+from load_data import ListDataset
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "2"
 
@@ -36,11 +37,14 @@ class MaxProbExtractor(nn.Module):
     def __init__(self):
         super(MaxProbExtractor, self).__init__()
 
-    def forward(self, model, batch_image):
+    def forward(self, model, batch_image, use_nms=False):
         images = torch.unbind(batch_image, 0)
         max_prob_t = torch.cuda.FloatTensor(batch_image.size(0)).fill_(0)
         for i, image in enumerate(images):
-            output = model(image)["instances"]
+            if use_nms:
+                output = model(image, use_nms)["instances"]
+            else:
+                output = model(image)["instances"]
             pred_classes = output.pred_classes
             scores = output.obj_conf
             people_scores = scores[pred_classes == model.people_index]  # select people predict score
@@ -581,7 +585,7 @@ class PatchEvaluatorOld(nn.Module):
 
 
 class PatchEvaluator(nn.Module):
-    def __init__(self, model, data_loader):
+    def __init__(self, model, data_loader, use_deformation=True):
         super(PatchEvaluator, self).__init__()
         self.p_config = patch_configs['base']()
         self.calculator = CalculateAP()
@@ -590,10 +594,15 @@ class PatchEvaluator(nn.Module):
         self.predicts = None
         self.ground_truths = None
         self.image_sizes = None
+        self.use_deformation = use_deformation
+        if use_deformation:
+            self.patch_transformer = PatchTransformerPro().cuda()
+            self.patch_applier = PatchApplierPro().cuda()
+        else:
+            self.patch_transformer = PatchTransformer().cuda()
+            self.patch_applier = PatchApplier().cuda()
         self.class_id = 0  # the class you want to calculate ap
         self.register_dataset(model, data_loader)
-        self.patch_transformer = PatchTransformerPro().cuda()
-        self.patch_applier = PatchApplierPro().cuda()
 
     def register_dataset(self, model, data_loader):
         self.data_loader = data_loader
@@ -604,8 +613,14 @@ class PatchEvaluator(nn.Module):
     # get people dicts from pytorch data loader
     def get_people_dicts(self, data_loader):
         dataset_dicts = []
-        for idx, (image_batch, _, people_boxes, labels_batch, _, _) in enumerate(
-                tqdm(data_loader, ascii=True, desc='load people\'s boxes information')):
+        length = len(data_loader)
+        data_loader = iter(data_loader)
+        for i in tqdm(range(length), ascii=True, desc='load people\'s boxes information'):
+            if self.use_deformation:
+                image_batch, _, people_boxes, labels_batch, _, _ = next(data_loader)
+            else:
+                image_batch, people_boxes, labels_batch = next(data_loader)
+
             for id in range(image_batch.size(0)):
                 boxes = people_boxes[id]
                 labels = labels_batch[id].view(-1)
@@ -626,6 +641,7 @@ class PatchEvaluator(nn.Module):
         return dataset_dicts
 
     def forward(self, adv_patch, threshold=0.5, clean=False):
+        adv_patch = adv_patch.cuda()
         predicts = self.inference_on_dataset(adv_patch, clean)
         ground_truths = copy.deepcopy(self.ground_truths)
         ap = self.calculator.ap(self.class_id, predicts, ground_truths, self.image_sizes, threshold=threshold)
@@ -635,24 +651,36 @@ class PatchEvaluator(nn.Module):
         file_name = f"{epoch}-"
         index = random.randint(0, 10)
         with torch.no_grad():
-            for id, (
-                    image_batch, clothes_boxes_batch, _, _, landmarks_batch, segmentations_batch) in enumerate(
-                tqdm(self.data_loader)):
+            for id, item in enumerate(tqdm(self.data_loader)):
                 if id != index:
                     continue
-
+                if self.use_deformation:
+                    image_batch, clothes_boxes_batch, _, _, landmarks_batch, segmentations_batch = item
+                    clothes_boxes_batch = clothes_boxes_batch.cuda()
+                    segmentations_batch = segmentations_batch.cuda()
+                    landmarks_batch = landmarks_batch.cuda()
+                else:
+                    image_batch, people_boxes, labels_batch = item
+                    people_boxes = people_boxes.cuda()
+                    labels_batch = labels_batch.cuda()
                 image_batch = image_batch.cuda()
+
                 if not clean:
                     adv_patch = adv_patch.cuda()
-                    adv_batch_t, adv_batch_mask_t = self.patch_transformer(adv_patch,
-                                                                           clothes_boxes_batch,
-                                                                           segmentations_batch,
-                                                                           landmarks_batch,
-                                                                           image_batch)
-                    p_img_batch = self.patch_applier(image_batch, adv_batch_t, adv_batch_mask_t)
+                    if self.use_deformation:
+                        adv_batch_t, adv_batch_mask_t = self.patch_transformer(adv_patch, clothes_boxes_batch,
+                                                                               segmentations_batch, landmarks_batch,
+                                                                               image_batch)
+                        p_img_batch = self.patch_applier(image_batch, adv_batch_t, adv_batch_mask_t)
+                    else:
+                        adv_batch_t = self.patch_transformer(adv_patch, people_boxes, labels_batch)
+                        plt.imshow(np.asarray(functional.to_pil_image(image_batch[0])))
+                        plt.show()
+                        p_img_batch = self.patch_applier(image_batch, adv_batch_t)
                 else:
                     p_img_batch = image_batch
-                p_img_batch = F.interpolate(p_img_batch, (self.p_config.img_size[0], self.p_config.img_size[1]))
+                p_img_batch = F.interpolate(p_img_batch, (self.p_config.img_size[0], self.p_config.img_size[1]),
+                                            mode='bilinear')
                 images = torch.unbind(p_img_batch, dim=0)
                 for idx, image in enumerate(images):
                     path = os.path.join(root_path, file_name + str(idx) + '.jpg')
@@ -669,22 +697,29 @@ class PatchEvaluator(nn.Module):
         images_ids_ = []
         confidences_ = []
         BB = []
+
         with torch.no_grad():
-            for id, (
-                    image_batch, clothes_boxes_batch, _, _, landmarks_batch, segmentations_batch) in enumerate(
-                tqdm(self.data_loader)):
+            for id, item in enumerate(tqdm(self.data_loader)):
+                if self.use_deformation:
+                    image_batch, clothes_boxes_batch, _, _, landmarks_batch, segmentations_batch = item
+                    clothes_boxes_batch = clothes_boxes_batch.cuda()
+                    landmarks_batch = landmarks_batch.cuda()
+                    segmentations_batch = segmentations_batch.cuda()
+                else:
+                    image_batch, people_boxes, labels_batch = item
+                    people_boxes = people_boxes.cuda()
+                    labels_batch = labels_batch.cuda()
                 image_batch = image_batch.cuda()
-                clothes_boxes_batch = clothes_boxes_batch.cuda()
-                landmarks_batch = landmarks_batch.cuda()
-                segmentations_batch = segmentations_batch.cuda()
+
                 if not clean:
-                    adv_patch = adv_patch.cuda()
-                    adv_batch_t, adv_batch_mask_t = self.patch_transformer(adv_patch,
-                                                                           clothes_boxes_batch,
-                                                                           segmentations_batch,
-                                                                           landmarks_batch,
-                                                                           image_batch)
-                    p_img_batch = self.patch_applier(image_batch, adv_batch_t, adv_batch_mask_t)
+                    if self.use_deformation:
+                        adv_batch_t, adv_batch_mask_t = self.patch_transformer(adv_patch, clothes_boxes_batch,
+                                                                               segmentations_batch, landmarks_batch,
+                                                                               image_batch)
+                        p_img_batch = self.patch_applier(image_batch, adv_batch_t, adv_batch_mask_t)
+                    else:
+                        adv_batch_t = self.patch_transformer(adv_patch, people_boxes, labels_batch)
+                        p_img_batch = self.patch_applier(image_batch, adv_batch_t)
                 else:
                     p_img_batch = image_batch
                 p_img_batch = F.interpolate(p_img_batch, (self.p_config.img_size[1], self.p_config.img_size[0]))
@@ -738,7 +773,8 @@ class PatchEvaluator(nn.Module):
                     image_batch, clothes_boxes_batch, _, _, landmarks_batch, segmentations_batch) in enumerate(
                 tqdm(self.data_loader)):
                 image_batch = image_batch.cuda()
-                image_batch = F.interpolate(image_batch, (self.p_config.img_size[1], self.p_config.img_size[0]))
+                image_batch = F.interpolate(image_batch, (self.p_config.img_size[1], self.p_config.img_size[0]),
+                                            mode='bilinear')
                 images = torch.unbind(image_batch, dim=0)
                 for idx, image in enumerate(images):
                     outputs = self.model(image)
@@ -967,7 +1003,7 @@ if __name__ == '__main__':
     warnings.filterwarnings("ignore")
     config = patch_configs['base']()
     test_data = DataLoader(
-        ListDatasetAnn(config.deepfooling_txt, range_=[0, 80]),
+        ListDataset(config.coco_val_txt),
         num_workers=4,
         batch_size=config.batch_size,
         shuffle=False
@@ -976,7 +1012,7 @@ if __name__ == '__main__':
     # model = Yolov3(model_path='model_data/yolo_weights.pth', image_size=416, classes_path='model_data/coco_classes.txt')
     model.set_image_size(config.img_size[0])
     # model.save
-    patch_evaluator = PatchEvaluator(model, test_data)
+    patch_evaluator = PatchEvaluator(model, test_data, use_deformation=False)
     from PIL import Image
 
     adv = Image.open('./patches/1.jpg')
@@ -984,8 +1020,8 @@ if __name__ == '__main__':
     adv = adv.cuda()
     patch_evaluator.save_visual_images(adv, './images/yolo_output', 1, clean=False)
 
-    ap = patch_evaluator(adv, clean=True)
-
+    ap = patch_evaluator(adv, clean=False)
+    print(ap)
 
     # model.set_image_size(config.img_size[0])
 

@@ -269,7 +269,7 @@ class Yolov3(BaseModel):
         input: torch tensor [3,w,h], Pixel value range [0,1]
         """
         # resize the input image
-        input_img = F.interpolate(image.unsqueeze(0), size=self.model_image_size[0])
+        input_img = F.interpolate(image.unsqueeze(0), size=self.model_image_size[0], mode='bilinear')
         # input_img = input_img.type(torch.cuda.FloatTensor)
         # [[x1, y1, x2, y2, confidence, class]]
         outputs = self.model(input_img)

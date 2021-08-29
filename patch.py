@@ -147,13 +147,14 @@ class PatchTransformer(nn.Module):
         target_size = torch.sqrt_(
             ((boxes_batch_scaled[:, :, 2].mul(0.2)) ** 2) + ((boxes_batch_scaled[:, :, 3].mul(0.2)) ** 2)
         )
+        target_size = target_size * self.configs.patch_scale
         target_x = boxes_batch[:, :, 0].view(np.prod(batch_size))
         target_y = boxes_batch[:, :, 1].view(np.prod(batch_size))
         target_off_x = boxes_batch[:, :, 2].view(np.prod(batch_size))
         target_off_y = boxes_batch[:, :, 3].view(np.prod(batch_size))
 
         # random change the patches' position
-        off_x = target_off_x * (torch.cuda.FloatTensor(target_off_x.size()).uniform_(-0.3, 0.3))
+        off_x = target_off_x * (torch.cuda.FloatTensor(target_off_x.size()).uniform_(-0.1, 0.1))
         target_x = target_x + off_x
         off_y = target_off_y * (torch.cuda.FloatTensor(target_off_y.size()).uniform_(-0.1, 0.1))
         target_y = target_y + off_y
@@ -216,7 +217,6 @@ class PatchApplierPro(nn.Module):
         super(PatchApplierPro, self).__init__()
 
     def forward(self, img_batch, adv_batch, adv_mask_batch):
-        img_batch = img_batch.clone()
         advs = torch.unbind(adv_batch, 1)
         masks = torch.unbind(adv_mask_batch, 1)
         # adv_batch [4, 15, 3, 416, 416]
@@ -476,7 +476,7 @@ class PatchTransformerPro(nn.Module):
         # target_size = torch.stack([w1, w2], dim=2)
         # target_size = torch.max(target_size, dim=2).values  # [batch, boxes number] in
         # change patch_scale can control the size of our patch
-        patch_scale = 0.7
+        patch_scale = self.patch_config.patch_scale
         target_size = torch.max(w1, w2)
         target_size = target_size * patch_scale
         # rotation patches to the right patch

@@ -51,6 +51,8 @@ class BaseConfig(object):
         self.model_image_size = int(config['DEFAULT']['MODEL_IMAGE_SIZE'])
         self.classes_path = config['DEFAULT']['CLASSES_PATH']
         self.detail_info = config['DEFAULT']['INFO']
+        self.coco_train_txt = config['DEFAULT']['COCO_TRAIN']
+        self.coco_val_txt = config['DEFAULT']['COCO_VAL']
 
 
 class Experiment1(BaseConfig):
