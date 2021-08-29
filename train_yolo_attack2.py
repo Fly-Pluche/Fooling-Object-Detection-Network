@@ -124,6 +124,7 @@ class PatchTrainer(object):
 
         # start training
         min_ap = 1
+        max_asr = 0
         for epoch in range(10000):
             ep_iou_all = 0
             ep_det_loss = 0
@@ -251,6 +252,10 @@ class PatchTrainer(object):
                         name2 = os.path.join(self.log_path, str(float(ap) * 100) + '.TIF')
                         adv_cmyk = functional.to_pil_image(adv_cmyk)
                         adv_cmyk.save(name2)
+                if float(asr) > max_asr:
+                    name = os.path.join(self.log_path, str(float(ap) * 100)[:3] + '_asr.jpg')
+                    torchvision.utils.save_image(adv, name)
+                    max_asr = float(asr)
 
             # ep_iou_all = ep_iou_all / len(train_data)
             # ep_conf_union_loss = ep_conf_union_loss / len(train_data)
@@ -264,6 +269,7 @@ class PatchTrainer(object):
                 logging.info(f'epoch: {epoch}| EPOCH NR: {epoch}'),
                 logging.info(f'epoch: {epoch}| EPOCH LOSS: {ep_loss}')
                 logging.info(f"epoch: {epoch}| AP: {ap}")
+                logging.info(f"epoch: {epoch}| LR: {optimizer.param_groups[0]['lr']}")
                 self.writer.add_scalar('ep_iou_all', ep_iou_all, epoch)
                 self.writer.add_scalar('ep_conf_union_loss', ep_conf_union_loss, epoch)
                 self.writer.add_scalar('ep_union_loss', ep_union_loss, epoch)
