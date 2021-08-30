@@ -163,6 +163,20 @@ class BaseASR(nn.Module):
     def calculate_asr(self):
         pass
 
+    def calculate_box_area(self, box):
+        h = box[3] - box[1]
+        w = box[2] - box[0]
+        return h * w
+
+    def judge_box_type(self, box):
+        area = self.calculate_box_area(box)
+        if area / (self.image_size[0] * self.image_size[1]) < 0.003:
+            return 'small'
+        elif 0.003 < area / (self.image_size[0] * self.image_size[1]) < 0.03:
+            return 'middle'
+        else:
+            return 'big'
+
 
 class ObjectVanishingASR(BaseASR):
     def __init__(self, image_size, use_deformation=True):
@@ -170,6 +184,16 @@ class ObjectVanishingASR(BaseASR):
 
     def calculate_asr(self):
         success_boxes_number = 0
+        boxes_success_number = {
+            'small': 0,
+            'big': 0,
+            'middle': 0
+        }
+        boxes_total_number = {
+            'small': 0,
+            'big': 0,
+            'middle': 0
+        }
         predicted_dicts = self.predicted_dicts
         for i, predicted_dict in enumerate(predicted_dicts):
             gt_boxes = self.dataset_dicts[i]['bbox']
@@ -189,11 +213,18 @@ class ObjectVanishingASR(BaseASR):
                          (pre_boxes[:, 2] - pre_boxes[:, 0]) *
                          (pre_boxes[:, 3] - pre_boxes[:, 1]) - inters)
                 iou = np.max(inters / union)
+                box_type = self.calculate_box_area(gt_boxes[j])
+                boxes_total_number[box_type] += 1
                 if iou < 0.5:
                     success_boxes_number += 1
+                    boxes_success_number[box_type] += 1
 
         # calculate ASR
-        return success_boxes_number / self.total_bbox_number
+        ASR = success_boxes_number / self.total_bbox_number
+        ASRs = boxes_success_number['small'] / boxes_total_number['small']
+        ASRm = boxes_success_number['middle'] / boxes_total_number['middle']
+        ASRl = boxes_success_number['big'] / boxes_total_number['big']
+        return ASR, ASRs, ASRm, ASRl
 
 
 class ObjectFabricationASR(BaseASR):
