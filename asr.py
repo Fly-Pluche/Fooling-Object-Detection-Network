@@ -213,7 +213,7 @@ class ObjectVanishingASR(BaseASR):
                          (pre_boxes[:, 2] - pre_boxes[:, 0]) *
                          (pre_boxes[:, 3] - pre_boxes[:, 1]) - inters)
                 iou = np.max(inters / union)
-                box_type = self.calculate_box_area(gt_boxes[j])
+                box_type = self.judge_box_type(gt_boxes[j])
                 boxes_total_number[box_type] += 1
                 if iou < 0.5:
                     success_boxes_number += 1
