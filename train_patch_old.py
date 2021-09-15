@@ -96,7 +96,7 @@ class PatchTrainer(object):
                 adv_batch_t = self.patch_transformer(adv_patch, boxes_batch, labels_batch)
                 p_img_batch = self.patch_applier(image_batch, adv_batch_t)
                 p_img_batch = F.interpolate(p_img_batch, (self.config.img_size[1], self.config.img_size[0]))
-                # plt.imshow(np.array(functional.to_pil_image(p_img_batch[0])))
+                # plt.pytorch_imshow(np.array(functional.to_pil_image(p_img_batch[0])))
                 # plt.show()
                 max_prob = self.max_prob_extractor(self.model_, p_img_batch)
 

@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt
 from patch import PatchTransformerPro, PatchApplierPro
 from patch_config import *
 from utils.transforms import CMYK2RGB
-from utils.utils import imshow
+from utils.utils import pytorch_imshow
 import warnings
 
 warnings.filterwarnings('ignore')
@@ -110,7 +110,7 @@ class PatchTrainer(object):
                 p_img_batch = F.interpolate(p_img_batch, (self.config.img_size[1], self.config.img_size[0]))
 
                 # show apply affection
-                # plt.imshow(np.array(functional.to_pil_image(p_img_batch[0])))
+                # plt.pytorch_imshow(np.array(functional.to_pil_image(p_img_batch[0])))
                 # plt.show()
                 max_prob, max_iou_t = self.max_extractor(self.model_, p_img_batch, people_boxes_batch)
                 det_loss = torch.sum(max_prob)

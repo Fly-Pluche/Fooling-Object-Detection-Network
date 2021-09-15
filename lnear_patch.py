@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 from patch import PatchTransformerPro, PatchApplierPro
 from patch_config import *
 from utils.transforms import CMYK2RGB
-from utils.utils import imshow
+from utils.utils import pytorch_imshow
 import warnings
 import cv2
 from patch import *

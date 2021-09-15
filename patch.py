@@ -17,7 +17,7 @@ from load_data import ListDatasetAnn
 from patch_config import patch_configs
 # from utils.delaunay2D import Delaunay2D
 from utils.parse_annotations import ParseTools
-from utils.utils import imshow
+from utils.utils import pytorch_imshow
 
 
 # os.environ["CUDA_VISIBLE_DEVICES"] = "1"
@@ -223,7 +223,7 @@ class PatchApplierPro(nn.Module):
         for adv, mask in zip(advs, masks):
             mask = mask.type(torch.float32)
             img_batch = torch.where(mask > 0.00001, adv, img_batch)
-        # plt.imshow(np.asarray(functional.to_pil_image(img_batch[0])))
+        # plt.pytorch_imshow(np.asarray(functional.to_pil_image(img_batch[0])))
         # plt.show()
         return img_batch
 
@@ -522,7 +522,7 @@ class PatchTransformerPro(nn.Module):
         adv_mask_batch = adv_mask_batch_t.clone()
         adv_mask_batch = adv_mask_batch[:, :, 0, :, :]
 
-        # imshow(adv_batch_t[0][0])
+        # pytorch_imshow(adv_batch_t[0][0])
         # turn rgb images to gray images
         images_batch_gray = images_batch.clone()
         images_batch_max = torch.max(images_batch_gray, dim=-3).values
@@ -601,13 +601,13 @@ if __name__ == '__main__':
     # image2 = visualor(images, boxes, labels, 'images/fg.jpeg')
     # out4 = model.default_predictor(image2)
     # img4 = model.visual_instance_predictions(image2, out4, mode='rgb')
-    # plt.imshow(img2)
+    # plt.pytorch_imshow(img2)
     # plt.show()
-    # plt.imshow(img)
+    # plt.pytorch_imshow(img)
     # plt.show()
-    # plt.imshow(img3)
+    # plt.pytorch_imshow(img3)
     # plt.show()
-    # plt.imshow(img4)
+    # plt.pytorch_imshow(img4)
     # plt.show()
     # image = PatchDelaunay2D()
     # print(len(image.seeds))
@@ -651,23 +651,23 @@ if __name__ == '__main__':
     print(torch.sum(seg, dim=(1, 2)))
     a = np.array(functional.to_pil_image(img_batch))
     fig, ax = plt.subplots(1)
-    # ax.imshow(a)
+    # ax.pytorch_imshow(a)
     # plt.show()
     # a = np.array(functional.to_pil_image(images_batch[0]))
     # fig, ax = plt.subplots(1)
-    # ax.imshow(a)
+    # ax.pytorch_imshow(a)
     # plt.show()
     # a = np.array(functional.to_pil_image(images_batch[1]))
     # fig, ax = plt.subplots(1)
-    # ax.imshow(a)
+    # ax.pytorch_imshow(a)
     # plt.show()
     # a = np.array(functional.to_pil_image(images_batch[2]))
     # fig, ax = plt.subplots(1)
-    # ax.imshow(a)
+    # ax.pytorch_imshow(a)
     # plt.show()
     # mask = _[image_id][0]
     # mask[:, :, :] = torch.mean(mask, dim=0)
-    # plt.imshow(np.array(functional.to_pil_image(mask)))
+    # plt.pytorch_imshow(np.array(functional.to_pil_image(mask)))
     # plt.show()
     # mean_ = torch.mean(mask[mask != 0])
     # mask[mask != 0] = 0.3 * (mask[mask != 0] - mean_) + mean_
@@ -675,7 +675,7 @@ if __name__ == '__main__':
     # mask = torch.clamp(mask, 0, 1)
     # # print(mask.size())
     # mask = np.array(functional.to_pil_image(mask))
-    # plt.imshow(mask)
+    # plt.pytorch_imshow(mask)
     # plt.show()
     # import matplotlib.patches as patches
     #

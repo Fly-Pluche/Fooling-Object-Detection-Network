@@ -313,7 +313,7 @@ if __name__ == '__main__':
     # image = np.array(functional.to_pil_image(image))
     # import matplotlib.pyplot as plt
     #
-    # plt.imshow(image)
+    # plt.pytorch_imshow(image)
     # plt.show()
 """
 [237, 94, 1, 

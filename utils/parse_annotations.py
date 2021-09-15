@@ -272,7 +272,7 @@ if __name__ == '__main__':
     # print(c.shape)
     # import matplotlib.pyplot as plt
     #
-    # plt.imshow(a.json['image'])
+    # plt.pytorch_imshow(a.json['image'])
     # plt.show()
-    # plt.imshow(c * a.json['image'])
+    # plt.pytorch_imshow(c * a.json['image'])
     # plt.show()

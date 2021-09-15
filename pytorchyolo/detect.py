@@ -181,7 +181,7 @@ def _draw_and_save_output_image(image_path, detections, img_size, output_path, c
     img = np.array(Image.open(image_path))
     plt.figure()
     fig, ax = plt.subplots(1)
-    ax.imshow(img)
+    ax.pytorch_imshow(img)
 
     # Rescale boxes to original image
     detections = rescale_boxes(detections, img_size, img.shape[:2])

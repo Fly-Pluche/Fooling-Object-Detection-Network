@@ -29,7 +29,7 @@ class BaseConfig(object):
         self.deepfooling_txt = config['DEFAULT']['DEEPFOOLING_TXT']
         self.patch_size = int(config['DEFAULT']['PATH_SIZE'])
         self.root_path = config['DEFAULT']['ROOT_PATH']
-        self.start_learning_rate = 0.03
+        self.start_learning_rate = 0.004
         self.patch_name = 'base'
         self.scheduler_factory = lambda x: optim.lr_scheduler.ReduceLROnPlateau(x, 'min', patience=50)
         self.batch_size = int(config['DEFAULT']['BATCH_SIZE'])
@@ -44,7 +44,7 @@ class BaseConfig(object):
         self.optim = config['DEFAULT']['OPTIM']
         self.patch_scale = float(config['DEFAULT']['PATCH_SCALE'])
         if self.optim == 'adam':
-            self.start_learning_rate = 0.03
+            self.start_learning_rate = 0.005
         else:
             self.start_learning_rate = 32 / 255.
         self.model_path = config['DEFAULT']['MODEL_PATH']

@@ -369,7 +369,7 @@ if __name__ == '__main__':
     # img = yolov3.visual_instance_predictions(img, output, mode='tensor')
     # import matplotlib.pyplot as plt
     #
-    # plt.imshow(img)
+    # plt.pytorch_imshow(img)
     # plt.show()
     # output = output['instances'].to('cpu')
     # t = ImageTools()

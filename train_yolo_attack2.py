@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt
 from patch import *
 from patch_config import *
 from utils.transforms import CMYK2RGB
-from utils.utils import imshow
+from utils.utils import *
 import warnings
 
 warnings.filterwarnings('ignore')
@@ -36,7 +36,7 @@ class PatchTrainer(object):
         # self.name = 'Yolov3'
         self.model_ = Yolov3(self.config.model_path, self.config.model_image_size, self.config.classes_path)
         self.model_.set_image_size(self.config.img_size[0])
-        self.name = 'YOLO_with_coco_datasets_use_nms'
+        self.name = 'YOLO_with_coco_datasets2'
         self.log_path = self.config.log_path
         self.writer = self.init_tensorboard(name='base')
         self.init_logger()
@@ -97,12 +97,14 @@ class PatchTrainer(object):
 
         # generate a rgb patch
         # adv_patch_cpu = self.generate_patch(
-        # load_from_file='logs/20210810-113457_base_RetinaNet_without_iou_loss/71.3587253925269.jpg')
+        #     load_from_file='./logs/20210913-192713_base_YOLO_with_coco_datasets2/87.9_asr.png',
+        #     is_cmyk=self.is_cmyk)
         adv_patch_cpu = self.generate_patch(is_random=True, is_cmyk=self.is_cmyk)
         adv_patch_cpu.requires_grad_(True)
         if self.config.optim == 'adam':
             optimizer = torch.optim.Adam([adv_patch_cpu], lr=self.config.start_learning_rate)
-            scheduler = self.config.scheduler_factory(optimizer)  # used to update learning rate
+            scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=20,
+                                                        gamma=0.2)  # used to update learning rate
         elif self.config.optim == 'sgd':
             optimizer = optim.SGD([adv_patch_cpu], momentum=0.9, lr=self.config.start_learning_rate)
             scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[10, 25, 60, 100, 190], gamma=0.5,
@@ -136,7 +138,7 @@ class PatchTrainer(object):
             for image_batch, people_boxes, labels_batch in tqdm(
                     train_data):
                 i_batch += 1
-
+                print(self.log_path)
                 image_batch = image_batch.cuda()
                 labels_batch = labels_batch.cuda()
                 people_boxes = people_boxes.cuda()
@@ -179,7 +181,8 @@ class PatchTrainer(object):
                         # w_union_attack = N * rs[3] / sum_rs
 
                 # loss = w_det * det_loss + w_tv * tv_loss
-                loss = det_loss + tv_loss * 2.5
+                loss = det_loss + tv_loss * 0.00000001
+                # loss = torch.max(det_loss, torch.tensor(0.1).cuda())
                 # loss = w_iou * iou_loss + w_conf_union * conf_loss_union_image + w_tv * tv_loss + w_union_attack * union_attack_loss
                 # loss = iou_loss
                 # loss = conf_loss_union_image
@@ -207,7 +210,6 @@ class PatchTrainer(object):
                 optimizer.step()
                 optimizer.zero_grad()
                 adv_patch_cpu.data.clamp_(0, 1)  # keep patch in image range
-
                 if i_batch % 23 == 0:
                     iteration = epoch_length * epoch + i_batch
                     # self.writer.add_scalar('total_loss', loss.detach().cpu().numpy(), iteration)
@@ -218,14 +220,16 @@ class PatchTrainer(object):
                     # self.writer.add_scalar('loss/union_loss', union_attack_loss.detach().cpu().numpy(), iteration)
                     self.writer.add_scalar('loss/det_loss', det_loss.detach().cpu().numpy(), iteration)
                     # self.writer.add_image('patch', adv_patch.cpu(), iteration)
-                    self.writer.add_image('patch', adv_patch.detach().cpu(), iteration)
+                    self.writer.add_image('patch', adv_patch.cpu(), iteration)
+                    plt.imshow(np.asarray(functional.to_pil_image(adv_patch_cpu)))
+                    plt.show()
 
                 del adv_batch_t, p_img_batch, det_loss, tv_loss, loss
                 # torch.cuda.empty_cache()
 
             # visual attack effection
             if epoch % 10 == 0:
-                self.patch_evaluator.save_visual_images(adv_patch_cpu.detach().clone(), self.image_save_path, epoch)
+                self.patch_evaluator.save_visual_images(adv_patch_cpu.clone(), self.image_save_path, epoch)
 
             # eval patch
             with torch.no_grad():
@@ -241,21 +245,27 @@ class PatchTrainer(object):
                 self.writer.add_scalar('ap', ap, epoch)
                 # calculate asr50
                 self.asr_calculate.inference_on_dataset(adv, clean=False)
-                asr = self.asr_calculate.calculate_asr()
-                self.writer.add_scalar('asr', asr, epoch)
+                ASR, ASRs, ASRm, ASRl = self.asr_calculate.calculate_asr()
+                print(self.log_path)
+                self.writer.add_scalar('ASR', ASR, epoch)
+                self.writer.add_scalar('ASRs', ASRs, epoch)
+                self.writer.add_scalar('ASRm', ASRm, epoch)
+                self.writer.add_scalar('ASRl', ASRl, epoch)
                 # save better patch image
                 if float(ap) < min_ap:
-                    name = os.path.join(self.log_path, str(float(ap) * 100) + '.jpg')
-                    torchvision.utils.save_image(adv, name)
+                    name = os.path.join(self.log_path, str(float(ap) * 100))
+                    torchvision.utils.save_image(adv, name + '.png')
+                    torch2raw(adv, name + '.raw')
                     min_ap = float(ap)
                     if self.is_cmyk:
                         name2 = os.path.join(self.log_path, str(float(ap) * 100) + '.TIF')
                         adv_cmyk = functional.to_pil_image(adv_cmyk)
                         adv_cmyk.save(name2)
-                if float(asr) > max_asr:
-                    name = os.path.join(self.log_path, str(float(ap) * 100)[:3] + '_asr.jpg')
-                    torchvision.utils.save_image(adv, name)
-                    max_asr = float(asr)
+                if float(ASR) > max_asr:
+                    name = os.path.join(self.log_path, str(float(ASR) * 100)[:4] + '_asr')
+                    torchvision.utils.save_image(adv, name + '.png')
+                    torch2raw(adv, name + '.raw')
+                    max_asr = float(ASR)
 
             # ep_iou_all = ep_iou_all / len(train_data)
             # ep_conf_union_loss = ep_conf_union_loss / len(train_data)
@@ -263,7 +273,7 @@ class PatchTrainer(object):
             ep_tv_loss = ep_tv_loss / len(train_data)
             ep_det_loss = ep_det_loss / len(train_data)
             ep_loss = ep_loss / len(train_data)
-            scheduler.step(ep_loss)
+            scheduler.step()
 
             if True:
                 logging.info(f'epoch: {epoch}| EPOCH NR: {epoch}'),
@@ -275,6 +285,7 @@ class PatchTrainer(object):
                 self.writer.add_scalar('ep_union_loss', ep_union_loss, epoch)
                 self.writer.add_scalar('ep_loss', ep_loss, epoch)
                 self.writer.add_scalar('AP', ap, epoch)
+                self.writer.add_scalar('LR', optimizer.param_groups[0]['lr'], epoch)
 
             # logging.info(f'epoch: {epoch} | ep_iou_all: {ep_iou_all}')
             logging.info(f'epoch: {epoch} | ep_tv_loss: {ep_tv_loss}')
@@ -288,9 +299,12 @@ class PatchTrainer(object):
     def generate_patch(self, load_from_file=None, is_random=False, is_cmyk=0):
         # load a image from local patch
         if load_from_file is not None:
-            patch = Image.open(load_from_file)
-            patch = patch.resize((self.config.patch_size, self.config.patch_size))
-            patch = transforms.PILToTensor()(patch) / 255.
+            if 'raw' in load_from_file:
+                patch = raw2torch(load_from_file, np.array([3, self.config.patch_size, self.config.patch_size]))
+            else:
+                patch = Image.open(load_from_file)
+                patch = patch.resize((self.config.patch_size, self.config.patch_size))
+                patch = transforms.PILToTensor()(patch) / 255.
             return patch
         if is_random:
             if is_cmyk:

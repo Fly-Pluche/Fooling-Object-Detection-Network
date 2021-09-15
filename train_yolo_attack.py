@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt
 from patch import PatchTransformerPro, PatchApplierPro
 from patch_config import *
 from utils.transforms import CMYK2RGB
-from utils.utils import imshow
+from utils.utils import pytorch_imshow
 import warnings
 
 warnings.filterwarnings('ignore')
@@ -219,14 +219,16 @@ class PatchTrainer(object):
                     # self.writer.add_scalar('loss/union_loss', union_attack_loss.detach().cpu().numpy(), iteration)
                     self.writer.add_scalar('loss/det_loss', det_loss.detach().cpu().numpy(), iteration)
                     # self.writer.add_image('patch', adv_patch.cpu(), iteration)
-                    self.writer.add_image('patch', adv_patch.detach().cpu(), iteration)
+                    self.writer.add_image('patch', adv_patch_cpu, iteration)
+                    plt.imshow(np.asarray(functional.to_pil_image(adv_patch_cpu)))
+                    plt.show()
 
                 del adv_batch_t, p_img_batch, adv_batch_mask_t, det_loss, tv_loss, loss
                 torch.cuda.empty_cache()
 
             # visual attack effection
             if epoch % 10 == 0:
-                self.patch_evaluator.save_visual_images(adv_patch_cpu.detach().clone(), self.image_save_path, epoch)
+                self.patch_evaluator.save_visual_images(adv_patch_cpu.clone(), self.image_save_path, epoch)
 
             # eval patch
             with torch.no_grad():

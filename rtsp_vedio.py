@@ -7,8 +7,8 @@ cap = cv2.VideoCapture(url)
 while True:
     ret, frame = cap.read()
     if ret:
-        # cv2.imshow("video", frame)
-        # plt.imshow(frame)
+        # cv2.pytorch_imshow("video", frame)
+        # plt.pytorch_imshow(frame)
         # plt.show()
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break

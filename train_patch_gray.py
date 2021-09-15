@@ -89,7 +89,7 @@ class PatchTrainer(object):
                 # img = p_img_batch[1, :, :, ]
                 # img = transforms.ToPILImage()(img.detach().cpu())
                 # img = np.asarray(img)
-                # plt.imshow(img)
+                # plt.pytorch_imshow(img)
                 # plt.show()
                 # exit()
 

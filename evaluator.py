@@ -3,6 +3,7 @@ import copy
 import time
 import logging
 import datetime
+import torch.fft as fft
 import matplotlib.pyplot as plt
 import torch.nn as nn
 import numpy as np
@@ -25,8 +26,10 @@ import random
 import os
 from tools import save_predict_image_torch
 from load_data import ListDataset
+from asr import ObjectVanishingASR
+from utils.frequency_tools import *
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "2"
+os.environ["CUDA_VISIBLE_DEVICES"] = "3"
 
 
 class MaxProbExtractor(nn.Module):
@@ -82,7 +85,7 @@ class MaxExtractor(nn.Module):
         grid = F.affine_grid(theta.unsqueeze(0), size)
         output = F.grid_sample(union_image.unsqueeze(0), grid)
         union_image = output[0]
-        # plt.imshow(np.array(functional.to_pil_image(union_image)))
+        # plt.pytorch_imshow(np.array(functional.to_pil_image(union_image)))
         # plt.show()
         # union_image = functional.resize()
         images = torch.unbind(batch_image, 0)
@@ -158,7 +161,7 @@ class DetMaxExtractor(nn.Module):
         grid = F.affine_grid(theta.unsqueeze(0), size)
         output = F.grid_sample(union_image.unsqueeze(0), grid)
         union_image = output.squeeze(0)
-        # plt.imshow(np.array(functional.to_pil_image(union_image)))
+        # plt.pytorch_imshow(np.array(functional.to_pil_image(union_image)))
         # plt.show()
         # union_image = functional.resize()
 
@@ -214,7 +217,7 @@ class ConfMaxExtractor(nn.Module):
         grid = F.affine_grid(theta.unsqueeze(0), size)
         output = F.grid_sample(union_image.unsqueeze(0), grid)
         union_image = output.squeeze(0)
-        # plt.imshow(np.array(functional.to_pil_image(union_image)))
+        # plt.pytorch_imshow(np.array(functional.to_pil_image(union_image)))
         # plt.show()
         # union_image = functional.resize()
 
@@ -290,7 +293,7 @@ class UnionDetector(nn.Module):
         images = torch.cat((image_batch, p_image_batch), dim=0)  # [2 * batch size,3,h,w]
         images = images[image_index]
         union_image = torchvision.utils.make_grid(images, nrow=int(w ** (1 / 2)), padding=0)
-        # plt.imshow(np.array(functional.to_pil_image(union_image)))
+        # plt.pytorch_imshow(np.array(functional.to_pil_image(union_image)))
         # plt.show()
 
         # adjust boxes coordinates
@@ -400,7 +403,7 @@ class UnionDetectorBCE(nn.Module):
         images = torch.cat((image_batch, p_image_batch), dim=0)  # [2 * batch size,3,h,w]
         images = images[image_index]
         union_image = torchvision.utils.make_grid(images, nrow=int(w ** (1 / 2)), padding=0)
-        # plt.imshow(np.array(functional.to_pil_image(union_image)))
+        # plt.pytorch_imshow(np.array(functional.to_pil_image(union_image)))
         # plt.show()
 
         # adjust boxes coordinates
@@ -551,7 +554,7 @@ class PatchEvaluatorOld(nn.Module):
                 for idx, image in enumerate(images):
                     outputs = self.model(image)
                     # a.json = model.visual_instance_predictions(image, outputs)
-                    # plt.imshow(a.json)
+                    # plt.pytorch_imshow(a.json)
                     # plt.show()
                     outputs = outputs['instances']
                     boxes = outputs.pred_boxes
@@ -674,8 +677,6 @@ class PatchEvaluator(nn.Module):
                         p_img_batch = self.patch_applier(image_batch, adv_batch_t, adv_batch_mask_t)
                     else:
                         adv_batch_t = self.patch_transformer(adv_patch, people_boxes, labels_batch)
-                        plt.imshow(np.asarray(functional.to_pil_image(image_batch[0])))
-                        plt.show()
                         p_img_batch = self.patch_applier(image_batch, adv_batch_t)
                 else:
                     p_img_batch = image_batch
@@ -683,7 +684,7 @@ class PatchEvaluator(nn.Module):
                                             mode='bilinear')
                 images = torch.unbind(p_img_batch, dim=0)
                 for idx, image in enumerate(images):
-                    path = os.path.join(root_path, file_name + str(idx) + '.jpg')
+                    path = os.path.join(root_path, file_name + str(idx) + '.png')
                     save_predict_image_torch(self.model, image, path)
                 if id == index:
                     break
@@ -727,7 +728,7 @@ class PatchEvaluator(nn.Module):
                 for idx, image in enumerate(images):
                     outputs = self.model(image, nms=True)
                     # a.json = model.visual_instance_predictions(image, outputs)
-                    # plt.imshow(a.json)
+                    # plt.pytorch_imshow(a.json)
                     # plt.show()
                     outputs = outputs['instances']
                     boxes = outputs.pred_boxes
@@ -779,7 +780,7 @@ class PatchEvaluator(nn.Module):
                 for idx, image in enumerate(images):
                     outputs = self.model(image)
                     # a.json = model.visual_instance_predictions(image, outputs)
-                    # plt.imshow(a.json)
+                    # plt.pytorch_imshow(a.json)
                     # plt.show()
                     outputs = outputs['instances']
                     boxes = outputs.pred_boxes
@@ -997,31 +998,73 @@ class CalculateAP:
         return box
 
 
+def calculate_asr(adv, batch_size=2, use_config=True):
+    # adv = functional.pil_to_tensor(adv) / 255.0
+    config = patch_configs['base']()
+    asr_calculate = ObjectVanishingASR(config.img_size, use_deformation=False)
+    if use_config:
+        batch_size = config.batch_size
+    test_data = DataLoader(
+        ListDataset(config.coco_val_txt, number=2000),
+        num_workers=16,
+        batch_size=batch_size
+    )
+    model = Yolov3(config.model_path, config.model_image_size, config.classes_path)
+    model.set_image_size(config.img_size[0])
+    asr_calculate.register_dataset(model, test_data)
+    asr_calculate.inference_on_dataset(adv, clean=False)
+    ASR, ASRs, ASRm, ASRl = asr_calculate.calculate_asr()
+    return ASR, ASRs, ASRm, ASRl
+
+
 if __name__ == '__main__':
     import warnings
+    import cv2
 
     warnings.filterwarnings("ignore")
-    config = patch_configs['base']()
-    test_data = DataLoader(
-        ListDataset(config.coco_val_txt),
-        num_workers=4,
-        batch_size=config.batch_size,
-        shuffle=False
-    )
-    model = Yolov3(model_path='net/yolov3/logs/Epoch10-Total_Loss11.4261-Val_Loss10.1546.pth', image_size=608)
-    # model = Yolov3(model_path='model_data/yolo_weights.pth', image_size=416, classes_path='model_data/coco_classes.txt')
-    model.set_image_size(config.img_size[0])
-    # model.save
-    patch_evaluator = PatchEvaluator(model, test_data, use_deformation=False)
-    from PIL import Image
 
-    adv = Image.open('./patches/1.jpg')
+    img_path = './logs/20210830-151340_base_YOLO_with_coco_datasets/visual_image/260-1.jpg'
+    # img_path = './logs/20210909-073432_base_YOLO_with_coco_datasets_use_nms/79.6_asr.jpg'
+    adv = Image.open(img_path)
+    # adv = np.asarray(adv)
     adv = functional.pil_to_tensor(adv) / 255.0
     adv = adv.cuda()
-    patch_evaluator.save_visual_images(adv, './images/yolo_output', 1, clean=False)
+    h, w = adv.size(1), adv.size(2)
+    lpf, hpf = produce_cycle_mask(h, w, 8)
+    lpf = lpf.cuda()
+    hpf = hpf.cuda()
+    plt.imshow(np.asarray(functional.to_pil_image(hpf)))
+    plt.show()
+    adv_l, adv_h = pytorch_fft(adv, lpf, hpf)
+    plt.imshow(np.asarray(functional.to_pil_image(adv_l[0])))
+    plt.show()
+    plt.imshow(np.asarray(functional.to_pil_image(adv_h[0])))
+    plt.show()
+    adv = adv_h[0]
+    # result = calculate_asr(adv, 2, use_config=False)
+    # print(result)
 
-    ap = patch_evaluator(adv, clean=False)
-    print(ap)
+    # config = patch_configs['base']()
+    # test_data = DataLoader(
+    #     ListDataset(config.coco_val_txt),
+    #     num_workers=4,
+    #     batch_size=config.batch_size,
+    #     shuffle=False
+    # )
+    # model = Yolov3(model_path='net/yolov3/logs/Epoch10-Total_Loss11.4261-Val_Loss10.1546.pth', image_size=608)
+    # # model = Yolov3(model_path='model_data/yolo_weights.pth', image_size=416, classes_path='model_data/coco_classes.txt')
+    # model.set_image_size(config.img_size[0])
+    # # model.save
+    # patch_evaluator = PatchEvaluator(model, test_data, use_deformation=False)
+    # from PIL import Image
+    #
+    # adv = Image.open('./patches/1.jpg')
+    # adv = functional.pil_to_tensor(adv) / 255.0
+    # adv = adv.cuda()
+    # patch_evaluator.save_visual_images(adv, './images/yolo_output', 1, clean=False)
+    #
+    # ap = patch_evaluator(adv, clean=False)
+    # print(ap)
 
     # model.set_image_size(config.img_size[0])
 
@@ -1056,3 +1099,8 @@ if __name__ == '__main__':
     # model.set_image_size(717)
     # result = model(img.cuda(), nms=True)
     # print(result)
+    #                  ASR, ASRs, ASRm, ASRl
+    # origin image: (0.9102340202584701, 0.7530864197530864, 0.5286624203821656, 0.6960352422907489)
+    # only low frequency: (0.9095354523227384, 0.7530864197530864, 0.5316455696202531, 0.691304347826087)
+    # cycle size:32: (0.9091861683548725, 0.7530120481927711, 0.5128205128205128, 0.7112068965517241)
+    # cycle size: 16:

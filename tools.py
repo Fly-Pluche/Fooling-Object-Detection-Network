@@ -127,7 +127,7 @@ def generate_attacked_results(adv_patch_cpu, config, data_loader, model):
         p_img_batch = patch_applier(image_batch, adv_batch_t, adv_batch_mask_t)
         p_img_batch = F.interpolate(p_img_batch, (config.img_size[1], config.img_size[0]))
         # show apply affection
-        # plt.imshow(np.array(functional.to_pil_image(image_batch[0])))
+        # plt.pytorch_imshow(np.array(functional.to_pil_image(image_batch[0])))
         # plt.show()
         p_img = p_img_batch[0]
         img = image_batch[0]
@@ -145,8 +145,8 @@ def generate_attacked_results(adv_patch_cpu, config, data_loader, model):
         cv2.imwrite('outputs/' + str(i) + '_0.jpg', p_img[:, :, ::-1])
         cv2.imwrite('outputs/' + str(i) + '_1.jpg', img[:, :, ::-1])
         i += 1
-        # plt.imshow(p_img)
-        # # plt.imshow(np.array(functional.to_pil_image(p_img)))
+        # plt.pytorch_imshow(p_img)
+        # # plt.pytorch_imshow(np.array(functional.to_pil_image(p_img)))
         # plt.show()
 
 
@@ -180,5 +180,5 @@ if __name__ == '__main__':
     # a.json = model.visual_instance_predictions(image, output, mode='pil', threshold=0.5)
     # import matplotlib.pyplot as plt
     #
-    # plt.imshow(a.json)
+    # plt.pytorch_imshow(a.json)
     # plt.show()
