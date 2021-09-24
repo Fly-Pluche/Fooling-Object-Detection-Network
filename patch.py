@@ -78,8 +78,8 @@ class PatchTransformer(nn.Module):
 
     def __init__(self):
         super(PatchTransformer, self).__init__()
-        self.min_contrast = 0.8  # min contrast
-        self.max_contrast = 1.2  # max contrast
+        self.min_contrast = 0.9  # min contrast
+        self.max_contrast = 1.1  # max contrast
         self.min_brightness = -0.1  # min brightness
         self.max_brightness = 0.1  # max brightness
         self.min_angle = -20 / 180 * math.pi  # min angle
@@ -97,7 +97,10 @@ class PatchTransformer(nn.Module):
                 else:
                     lab_batch[i, j] = 0
         # make a batch of adversarial patch
-        adv_patch = self.median_pooler(adv_patch.unsqueeze(0))
+        pytorch_imshow(adv_patch[0])
+        # adv_patch = self.median_pooler(adv_patch.unsqueeze(0))
+        adv_patch = adv_patch.unsqueeze(0)
+        pytorch_imshow(adv_patch[0])
         # determine size of padding
         img_size = np.array(self.configs.img_size)
         # adv_patch is a square

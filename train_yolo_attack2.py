@@ -96,10 +96,10 @@ class PatchTrainer(object):
         epoch_length = len(train_data)
 
         # generate a rgb patch
-        # adv_patch_cpu = self.generate_patch(
-        #     load_from_file='./logs/20210913-192713_base_YOLO_with_coco_datasets2/87.9_asr.png',
-        #     is_cmyk=self.is_cmyk)
-        adv_patch_cpu = self.generate_patch(is_random=True, is_cmyk=self.is_cmyk)
+        adv_patch_cpu = self.generate_patch(
+            load_from_file='./logs/20210922-071244_base_YOLO_with_coco_datasets2/72.0_asr.png',
+            is_cmyk=self.is_cmyk)
+        # adv_patch_cpu = self.generate_patch(is_random=True, is_cmyk=self.is_cmyk)
         adv_patch_cpu.requires_grad_(True)
         if self.config.optim == 'adam':
             optimizer = torch.optim.Adam([adv_patch_cpu], lr=self.config.start_learning_rate)
@@ -127,7 +127,7 @@ class PatchTrainer(object):
         # start training
         min_ap = 1
         max_asr = 0
-        for epoch in range(10000):
+        for epoch in range(100000):
             ep_iou_all = 0
             ep_det_loss = 0
             ep_conf_union_loss = 0
@@ -221,8 +221,6 @@ class PatchTrainer(object):
                     self.writer.add_scalar('loss/det_loss', det_loss.detach().cpu().numpy(), iteration)
                     # self.writer.add_image('patch', adv_patch.cpu(), iteration)
                     self.writer.add_image('patch', adv_patch.cpu(), iteration)
-                    plt.imshow(np.asarray(functional.to_pil_image(adv_patch_cpu)))
-                    plt.show()
 
                 del adv_batch_t, p_img_batch, det_loss, tv_loss, loss
                 # torch.cuda.empty_cache()

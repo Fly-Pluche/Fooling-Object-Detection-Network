@@ -10,3 +10,6 @@ vedios
 deepfooling
 *.pth
 *.whl
+*.raw
+*.png
+*.jpg

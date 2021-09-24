@@ -6,7 +6,7 @@ from utils.utils import *
 from evaluator import calculate_asr
 import os
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "3"
+os.environ["CUDA_VISIBLE_DEVICES"] = "2"
 
 torch.manual_seed(2233)
 torch.cuda.manual_seed(2233)
