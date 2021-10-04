@@ -31,7 +31,7 @@ def predict_one_image(model, image, threshold=0.4):
         image: a.json rgb np array
         threshold: boxes under this value will not be shown in the result.
     """
-    output = model.default_predictor_(image)
+    output = model.default_predictor(image)
     result = model.visual_instance_predictions(image, output, mode='pil', threshold=threshold)
     return result
 
@@ -151,15 +151,15 @@ def generate_attacked_results(adv_patch_cpu, config, data_loader, model):
 
 
 if __name__ == '__main__':
-    model = FasterRCNN()
-    scale = 1
+    # model = FasterRCNN()
+    # scale = 1
     # show_predict_result(model, './images/aaa.jpg', scale)
     # show_predict_result(model, './images/aaa2.jpg', scale)
     # show_predict_result(model, './images/aaa3.jpg', scale)
     # show_predict_result(model, './images/aaa5.jpg', scale)
     # show_predict_result(model, './images/aaa.jpg', scale)
     # show_predict_result(model, './images/aaa7.jpg', scale)
-    predict_one_video(model, './vedios/202107181817.mp4', './vedios/out.mp4')
+    # predict_one_video(model, './vedios/202107181817.mp4', './vedios/out.mp4')
     # predict_one_image(model,)
     # model = FasterRCNN_R50_C4()
     # img = cv2.imread('images/a.json.jpg')
@@ -181,4 +181,24 @@ if __name__ == '__main__':
     # import matplotlib.pyplot as plt
     #
     # plt.pytorch_imshow(a.json)
+    # plt.show()
+    import os
+
+    os.environ["CUDA_VISIBLE_DEVICES"] = "3"
+    image = Image.open('./paper_images/big_high_pig_rev.png')
+    image = functional.pil_to_tensor(image) / 255.0
+    image = image.cuda()
+    config = patch_configs['base']()  # load base config
+    model_ = Yolov3(config.model_path, config.model_image_size, config.classes_path)
+    model_.confidence_predict = 0.0001
+    model_.confidence = 0.0001
+    model_.set_image_size(image.shape[1])
+    out = model_.yolo_predictor(image, nms=True)
+    re = model_.visual_instance_predictions(image, out)
+    plt.imshow(re)
+    plt.show()
+    print(out)
+
+    # re = predict_one_image(model_, image)
+    # plt.imshow(re)
     # plt.show()

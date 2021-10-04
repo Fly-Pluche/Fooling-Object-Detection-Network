@@ -16,6 +16,7 @@ from PIL import Image
 from torch.utils.data import DataLoader
 from patch import PatchTransformerPro, PatchApplierPro, PatchApplier, PatchTransformer
 from utils.parse_annotations import ParseTools
+from utils.frequency_tools import pytorch_fft
 from patch_config import patch_configs
 from load_data import ListDatasetAnn
 from models import *
@@ -261,8 +262,38 @@ class TotalVariation(nn.Module):
         tvcomp1 = torch.sum(torch.sum(tvcomp1, 0), 0)
         tvcomp2 = torch.sum(torch.abs(adv_patch[:, 1:, :] - adv_patch[:, :-1, :] + 0.000001), 0)
         tvcomp2 = torch.sum(torch.sum(tvcomp2, 0), 0)
-        tv = tvcomp1 + tvcomp2
+        tvcomp3 = torch.sum(torch.abs(adv_patch[:, 1:, 1:] - adv_patch[:, :-1, :-1] + 0.000001), 0)
+        tvcomp3 = torch.sum(torch.sum(tvcomp3, 0), 0)
+        tv = tvcomp1 + tvcomp2 + tvcomp3
         return tv / torch.numel(adv_patch)
+
+
+class FrequencyLoss(nn.Module):
+    """TotalVariation: calculates the total variation of a.json patch.
+
+    Module providing the functionality necessary to calculate the total vatiation (TV) of an adversarial patch.
+
+    """
+
+    def __init__(self, config):
+        super(FrequencyLoss, self).__init__()
+        self.config = config
+        img_h = self.config.patch_size
+        img_w = self.config.patch_size
+        lpf = torch.zeros((img_h, img_h))
+        R = (img_h + img_w) // 8
+        for x in range(img_w):
+            for y in range(img_h):
+                if ((x - (img_w - 1) / 2) ** 2 + (y - (img_h - 1) / 2) ** 2) < (R ** 2):
+                    lpf[y, x] = 1
+        hpf = 1 - lpf
+        self.lpf = lpf.cuda()
+        self.hpf = hpf.cuda()
+
+    def forward(self, adv_patch):
+        img_low_frequency, img_high_frequency = pytorch_fft(adv_patch, self.lpf, self.hpf)
+        loss = torch.sum(img_high_frequency)
+        return loss
 
 
 class UnionDetector(nn.Module):
@@ -1024,24 +1055,40 @@ if __name__ == '__main__':
 
     warnings.filterwarnings("ignore")
 
-    img_path = './logs/20210830-151340_base_YOLO_with_coco_datasets/visual_image/260-1.jpg'
+    img_path = './images/people.jpg'
     # img_path = './logs/20210909-073432_base_YOLO_with_coco_datasets_use_nms/79.6_asr.jpg'
     adv = Image.open(img_path)
     # adv = np.asarray(adv)
     adv = functional.pil_to_tensor(adv) / 255.0
     adv = adv.cuda()
     h, w = adv.size(1), adv.size(2)
-    lpf, hpf = produce_cycle_mask(h, w, 8)
+    lpf, hpf = produce_cycle_mask(h, w, 10)
     lpf = lpf.cuda()
     hpf = hpf.cuda()
+    plt.xticks([])
+    plt.yticks([])
+    plt.axis('off')
     plt.imshow(np.asarray(functional.to_pil_image(hpf)))
     plt.show()
     adv_l, adv_h = pytorch_fft(adv, lpf, hpf)
-    plt.imshow(np.asarray(functional.to_pil_image(adv_l[0])))
+    plt.xticks([])
+    plt.yticks([])
+    plt.axis('off')
+    img = np.asarray(functional.to_pil_image(adv_l[0]))
+    plt.imshow(img)
     plt.show()
-    plt.imshow(np.asarray(functional.to_pil_image(adv_h[0])))
+    img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+    cv2.imwrite('./paper_images/big_low_pig.png', img)
+    plt.xticks([])
+    plt.yticks([])
+    plt.axis('off')
+    img2 = np.asarray(functional.to_pil_image(adv_h[0]))
+    plt.imshow(img2)
     plt.show()
-    adv = adv_h[0]
+    img2 = cv2.cvtColor(img2, cv2.COLOR_RGB2BGR)
+    cv2.imwrite('./paper_images/big_high_pig.png', img2)
+    # adv = adv_h[0]
+    # plt.savefig('./paper_images/big_high_pig.png')
     # result = calculate_asr(adv, 2, use_config=False)
     # print(result)
 

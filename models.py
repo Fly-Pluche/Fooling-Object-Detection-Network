@@ -354,23 +354,26 @@ class Yolov3(BaseModel):
             img = functional.pil_to_tensor(img) / 255.0
         else:
             img = functional.to_tensor(img) / 255.0
-        return self.yolo_predictor(img)
+        return self.yolo_predictor(img.cuda())
 
 
 if __name__ == '__main__':
-    img = Image.open('./images/aaa.jpg')
+    import os
+    os.environ["CUDA_VISIBLE_DEVICES"] = "3"
+    img = Image.open('./paper_images/big_high_pig.png')
     # img = img.resize((416, 416))
     yolov3 = Yolov3()
+    yolov3.set_image_size(())
     img = functional.pil_to_tensor(img) / 255.0
     img = img.cuda()
-    img = img.unsqueeze(0)
-    output = yolov3.model(img)
+    # img = img.unsqueeze(0)
+    output = yolov3.yolo_predictor(img)
     print(output)
-    # img = yolov3.visual_instance_predictions(img, output, mode='tensor')
-    # import matplotlib.pyplot as plt
-    #
-    # plt.pytorch_imshow(img)
-    # plt.show()
+    img = yolov3.visual_instance_predictions(img[0], output, mode='tensor')
+    import matplotlib.pyplot as plt
+
+    plt.imshow(img)
+    plt.show()
     # output = output['instances'].to('cpu')
     # t = ImageTools()
     # FasterRCNN_R50_C4()

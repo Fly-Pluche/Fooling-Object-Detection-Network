@@ -97,10 +97,8 @@ class PatchTransformer(nn.Module):
                 else:
                     lab_batch[i, j] = 0
         # make a batch of adversarial patch
-        pytorch_imshow(adv_patch[0])
-        # adv_patch = self.median_pooler(adv_patch.unsqueeze(0))
-        adv_patch = adv_patch.unsqueeze(0)
-        pytorch_imshow(adv_patch[0])
+        adv_patch = self.median_pooler(adv_patch.unsqueeze(0))
+        # adv_patch = adv_patch.unsqueeze(0)
         # determine size of padding
         img_size = np.array(self.configs.img_size)
         # adv_patch is a square

@@ -47,6 +47,7 @@ class PatchTrainer(object):
         self.max_extractor = MaxProbExtractor().cuda()
         self.total_variation = TotalVariation().cuda()
         self.union_detector = UnionDetectorBCE().cuda()
+        self.frequency_loss = FrequencyLoss(self.config).cuda()
         self.patch_evaluator = None
         self.entropy = nn.BCELoss()
         self.is_cmyk = self.config.is_cmyk
@@ -97,14 +98,15 @@ class PatchTrainer(object):
 
         # generate a rgb patch
         adv_patch_cpu = self.generate_patch(
-            load_from_file='./logs/20210922-071244_base_YOLO_with_coco_datasets2/72.0_asr.png',
+            load_from_file='./logs/20211001-153330_base_YOLO_with_coco_datasets2/86.6_asr.png',
             is_cmyk=self.is_cmyk)
         # adv_patch_cpu = self.generate_patch(is_random=True, is_cmyk=self.is_cmyk)
         adv_patch_cpu.requires_grad_(True)
+
         if self.config.optim == 'adam':
             optimizer = torch.optim.Adam([adv_patch_cpu], lr=self.config.start_learning_rate)
-            scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=20,
-                                                        gamma=0.2)  # used to update learning rate
+            scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=50,
+                                                        gamma=0.5)  # used to update learning rate
         elif self.config.optim == 'sgd':
             optimizer = optim.SGD([adv_patch_cpu], momentum=0.9, lr=self.config.start_learning_rate)
             scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[10, 25, 60, 100, 190], gamma=0.5,
@@ -154,6 +156,7 @@ class PatchTrainer(object):
                 # calculate each part of the loss
                 det_loss = torch.mean(self.max_extractor(self.model_, p_img_batch))
                 tv_loss = self.total_variation(adv_patch)
+                frequency_loss = self.frequency_loss(adv_patch)
                 # predicted_id, attack_id = self.union_detector(self.model_, image_batch, p_img_batch, people_boxes_batch)
                 # union_attack_loss = self.entropy(predicted_id, attack_id)
 
@@ -181,7 +184,10 @@ class PatchTrainer(object):
                         # w_union_attack = N * rs[3] / sum_rs
 
                 # loss = w_det * det_loss + w_tv * tv_loss
-                loss = det_loss + tv_loss * 0.00000001
+                print(tv_loss)
+                loss = det_loss + tv_loss * 2.5 + frequency_loss * 0.0005
+
+                print("f:", frequency_loss)
                 # loss = torch.max(det_loss, torch.tensor(0.1).cuda())
                 # loss = w_iou * iou_loss + w_conf_union * conf_loss_union_image + w_tv * tv_loss + w_union_attack * union_attack_loss
                 # loss = iou_loss
