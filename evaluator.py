@@ -16,7 +16,6 @@ from PIL import Image
 from torch.utils.data import DataLoader
 from patch import PatchTransformerPro, PatchApplierPro, PatchApplier, PatchTransformer
 from utils.parse_annotations import ParseTools
-from utils.frequency_tools import pytorch_fft
 from patch_config import patch_configs
 from load_data import ListDatasetAnn
 from models import *
@@ -29,7 +28,6 @@ from tools import save_predict_image_torch
 from load_data import ListDataset
 from asr import ObjectVanishingASR
 from utils.frequency_tools import *
-from utils.utils import *
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "3"
 
@@ -252,7 +250,6 @@ class TotalVariation(nn.Module):
     Module providing the functionality necessary to calculate the total vatiation (TV) of an adversarial patch.
 
     """
-
     def __init__(self):
         super(TotalVariation, self).__init__()
 
@@ -262,9 +259,16 @@ class TotalVariation(nn.Module):
         tvcomp1 = torch.sum(torch.sum(tvcomp1, 0), 0)
         tvcomp2 = torch.sum(torch.abs(adv_patch[:, 1:, :] - adv_patch[:, :-1, :] + 0.000001), 0)
         tvcomp2 = torch.sum(torch.sum(tvcomp2, 0), 0)
-        tvcomp3 = torch.sum(torch.abs(adv_patch[:, 1:, 1:] - adv_patch[:, :-1, :-1] + 0.000001), 0)
+        tv = tvcomp1 + tvcomp2
+
+        tvcomp3= torch.sum(torch.abs(adv_patch[:, 1:, 1:] - adv_patch[:, :-1, :-1] + 0.000001), 0)
         tvcomp3 = torch.sum(torch.sum(tvcomp3, 0), 0)
-        tv = tvcomp1 + tvcomp2 + tvcomp3
+        tv=tv+tvcomp3
+
+        tvcomp4= torch.sum(torch.abs(adv_patch[:, 1:, :-1] - adv_patch[:, :-1, 1:] + 0.000001), 0)
+        tvcomp4 = torch.sum(torch.sum(tvcomp4, 0), 0)
+        tv=tv+tvcomp4
+
         return tv / torch.numel(adv_patch)
 
 
@@ -281,7 +285,7 @@ class FrequencyLoss(nn.Module):
         img_h = self.config.patch_size
         img_w = self.config.patch_size
         lpf = torch.zeros((img_h, img_h))
-        R = (img_h + img_w) // 8
+        R = (img_h + img_w) // self.config.fft_size
         for x in range(img_w):
             for y in range(img_h):
                 if ((x - (img_w - 1) / 2) ** 2 + (y - (img_h - 1) / 2) ** 2) < (R ** 2):
@@ -293,8 +297,170 @@ class FrequencyLoss(nn.Module):
     def forward(self, adv_patch):
         img_low_frequency, img_high_frequency = pytorch_fft(adv_patch, self.lpf, self.hpf)
         loss = torch.sum(img_high_frequency)
+
+        # loss=loss-torch.sum(img_low_frequency)*0.0008
+        # 改权重
         return loss
 
+
+def _fspecial_gauss_1d(size, sigma):
+    coords = torch.arange(size).to(dtype=torch.float)
+    coords -= size // 2
+    g = torch.exp(-(coords ** 2) / (2 * sigma ** 2))
+    g /= g.sum()
+    return g.unsqueeze(0).unsqueeze(0)
+
+def gaussian_filter(input, win):
+    N, C, H, W = input.shape
+    out = F.conv2d(input, win, stride=1, padding=0, groups=C)
+    out = F.conv2d(out, win.transpose(2, 3), stride=1, padding=0, groups=C)
+    return out
+
+def _ssim(X, Y, win, data_range=1023, size_average=True, full=False):
+    K1 = 0.01
+    K2 = 0.03
+    batch, channel, height, width = X.shape
+    compensation = 1.0
+
+    C1 = (K1 * data_range) ** 2
+    C2 = (K2 * data_range) ** 2
+
+    win = win.to(X.device, dtype=X.dtype)
+
+    mu1 = gaussian_filter(X, win)
+    mu2 = gaussian_filter(Y, win)
+
+    mu1_sq = mu1.pow(2)
+    mu2_sq = mu2.pow(2)
+    mu1_mu2 = mu1 * mu2
+
+    sigma1_sq = compensation * (gaussian_filter(X * X, win) - mu1_sq)
+    sigma2_sq = compensation * (gaussian_filter(Y * Y, win) - mu2_sq)
+    sigma12 = compensation * (gaussian_filter(X * Y, win) - mu1_mu2)
+
+    cs_map = (2 * sigma12 + C2) / (sigma1_sq + sigma2_sq + C2)
+    ssim_map = ((2 * mu1_mu2 + C1) / (mu1_sq + mu2_sq + C1)) * cs_map
+
+    if size_average:
+        ssim_val = ssim_map.mean()
+        cs = cs_map.mean()
+    else:
+        ssim_val = ssim_map.mean(-1).mean(-1).mean(-1)  # reduce along CHW
+        cs = cs_map.mean(-1).mean(-1).mean(-1)
+
+    if full:
+        return ssim_val, cs
+    else:
+        return ssim_val
+
+def ssim(X, Y, win_size=11, win_sigma=10, win=None, data_range=1, size_average=True, full=False):
+    if len(X.shape) != 4:
+        raise ValueError('Input images must 4-d tensor.')
+
+    if not X.type() == Y.type():
+        raise ValueError('Input images must have the same dtype.')
+
+    if not X.shape == Y.shape:
+        raise ValueError('Input images must have the same dimensions.')
+
+    if not (win_size % 2 == 1):
+        raise ValueError('Window size must be odd.')
+
+    win_sigma = win_sigma
+    if win is None:
+        win = _fspecial_gauss_1d(win_size, win_sigma)
+        win = win.repeat(X.shape[1], 1, 1, 1)
+    else:
+        win_size = win.shape[-1]
+
+    ssim_val, cs = _ssim(X, Y,
+                         win=win,
+                         data_range=data_range,
+                         size_average=False,
+                         full=True)
+    if size_average:
+        ssim_val = ssim_val.mean()
+        cs = cs.mean()
+
+    if full:
+        return ssim_val, cs
+    else:
+        return ssim_val
+
+def ms_ssim(X, Y, win_size=11, win_sigma=10, win=None, data_range=1, size_average=True, full=False, weights=None):
+    if len(X.shape) != 4:
+        raise ValueError('Input images must 4-d tensor.')
+
+    if not X.type() == Y.type():
+        raise ValueError('Input images must have the same dtype.')
+
+    if not X.shape == Y.shape:
+        raise ValueError('Input images must have the same dimensions.')
+
+    if not (win_size % 2 == 1):
+        raise ValueError('Window size must be odd.')
+
+    if weights is None:
+        weights = torch.FloatTensor(
+            [0.0448, 0.2856, 0.3001, 0.2363, 0.1333]).to(X.device, dtype=X.dtype)
+
+    win_sigma = win_sigma
+    if win is None:
+        win = _fspecial_gauss_1d(win_size, win_sigma)
+        win = win.repeat(X.shape[1], 1, 1, 1)
+    else:
+        win_size = win.shape[-1]
+
+    levels = weights.shape[0]
+    mcs = []
+    for _ in range(levels):
+        ssim_val, cs = _ssim(X, Y,
+                             win=win,
+                             data_range=data_range,
+                             size_average=False,
+                             full=True)
+        mcs.append(cs)
+
+        padding = (X.shape[2] % 2, X.shape[3] % 2)
+        X = F.avg_pool2d(X, kernel_size=2, padding=padding)
+        Y = F.avg_pool2d(Y, kernel_size=2, padding=padding)
+
+    mcs = torch.stack(mcs, dim=0)  # mcs, (level, batch)
+    # weights, (level)
+    msssim_val = torch.prod((mcs[:-1] ** weights[:-1].unsqueeze(1))
+                            * (ssim_val ** weights[-1]), dim=0)  # (batch, )
+
+    if size_average:
+        msssim_val = msssim_val.mean()
+    return msssim_val
+
+# Classes to re-use window
+class SSIM(torch.nn.Module):
+    def __init__(self, win_size=11, win_sigma=1.5, data_range=255, size_average=True, channel=3):
+        super(SSIM, self).__init__()
+        self.win = _fspecial_gauss_1d(
+            win_size, win_sigma).repeat(channel, 1, 1, 1)
+        self.size_average = size_average
+        self.data_range = data_range
+
+    def forward(self, X, Y):
+        return ssim(X, Y, win=self.win, data_range=self.data_range, size_average=self.size_average)
+
+class MS_SSIMLOSS(nn.Module):
+    def __init__(self, win_size=11, win_sigma=1.5, data_range=255, size_average=True, channel=3, weights=None):
+        super(MS_SSIMLOSS, self).__init__()
+        self.win = _fspecial_gauss_1d(
+            win_size, win_sigma).repeat(channel, 1, 1, 1)
+        self.size_average = size_average
+        self.data_range = data_range
+        self.weights = weights
+
+    def forward(self, X):
+        X=X.unsqueeze(0)
+        Y=X[:,:,1:,1:]
+        X=X[:,:,:-1,:-1]
+        return ms_ssim(X, Y, win=self.win, size_average=self.size_average, data_range=self.data_range,
+                       weights=self.weights)
 
 class UnionDetector(nn.Module):
     def __init__(self):
@@ -1055,40 +1221,24 @@ if __name__ == '__main__':
 
     warnings.filterwarnings("ignore")
 
-    img_path = './images/people.jpg'
+    img_path = './logs/20210830-151340_base_YOLO_with_coco_datasets/visual_image/260-1.jpg'
     # img_path = './logs/20210909-073432_base_YOLO_with_coco_datasets_use_nms/79.6_asr.jpg'
     adv = Image.open(img_path)
     # adv = np.asarray(adv)
     adv = functional.pil_to_tensor(adv) / 255.0
     adv = adv.cuda()
     h, w = adv.size(1), adv.size(2)
-    lpf, hpf = produce_cycle_mask(h, w, 10)
+    lpf, hpf = produce_cycle_mask(h, w, 20)
     lpf = lpf.cuda()
     hpf = hpf.cuda()
-    plt.xticks([])
-    plt.yticks([])
-    plt.axis('off')
     plt.imshow(np.asarray(functional.to_pil_image(hpf)))
     plt.show()
     adv_l, adv_h = pytorch_fft(adv, lpf, hpf)
-    plt.xticks([])
-    plt.yticks([])
-    plt.axis('off')
-    img = np.asarray(functional.to_pil_image(adv_l[0]))
-    plt.imshow(img)
+    plt.imshow(np.asarray(functional.to_pil_image(adv_l[0])))
     plt.show()
-    img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-    cv2.imwrite('./paper_images/big_low_pig.png', img)
-    plt.xticks([])
-    plt.yticks([])
-    plt.axis('off')
-    img2 = np.asarray(functional.to_pil_image(adv_h[0]))
-    plt.imshow(img2)
+    plt.imshow(np.asarray(functional.to_pil_image(adv_h[0])))
     plt.show()
-    img2 = cv2.cvtColor(img2, cv2.COLOR_RGB2BGR)
-    cv2.imwrite('./paper_images/big_high_pig.png', img2)
-    # adv = adv_h[0]
-    # plt.savefig('./paper_images/big_high_pig.png')
+    adv = adv_h[0]
     # result = calculate_asr(adv, 2, use_config=False)
     # print(result)
 

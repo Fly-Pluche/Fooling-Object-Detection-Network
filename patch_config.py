@@ -26,10 +26,12 @@ class BaseConfig(object):
         self.weight_file = "/home/corona/attack/PyTorch-YOLOv3/good_weights/yolov3_ckpt_98.pth"
         self.txt_path = '/home/corona/datasets/WiderPerson/train/train2.txt'
         self.save_adv_patch_path = config['DEFAULT']['SAVE_ADV_PATCH_PATH']
+        self.step_size=float(config['DEFAULT']['STEP_SIZE'])
+        self.gamma=float(config['DEFAULT']['GAMMA'])
         self.deepfooling_txt = config['DEFAULT']['DEEPFOOLING_TXT']
         self.patch_size = int(config['DEFAULT']['PATH_SIZE'])
         self.root_path = config['DEFAULT']['ROOT_PATH']
-        self.start_learning_rate = 0.004
+        # self.start_learning_rate = 0.004
         self.patch_name = 'base'
         self.scheduler_factory = lambda x: optim.lr_scheduler.ReduceLROnPlateau(x, 'min', patience=50)
         self.batch_size = int(config['DEFAULT']['BATCH_SIZE'])
@@ -42,9 +44,10 @@ class BaseConfig(object):
         self.log_path = config['DEFAULT']['LOG_PATH']
         self.is_cmyk = int(config['DEFAULT']['IS_CMYK'])
         self.optim = config['DEFAULT']['OPTIM']
+        self.fft_size = float(config['DEFAULT']['FFT_SIZE'])
         self.patch_scale = float(config['DEFAULT']['PATCH_SCALE'])
         if self.optim == 'adam':
-            self.start_learning_rate = 0.005
+            self.start_learning_rate = float(config['DEFAULT']['START_LEARNING_RATE'])
         else:
             self.start_learning_rate = 32 / 255.
         self.model_path = config['DEFAULT']['MODEL_PATH']
