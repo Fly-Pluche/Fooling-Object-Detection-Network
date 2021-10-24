@@ -2,73 +2,17 @@
 <project version="4">
   <component name="PublishConfigData" autoUpload="Always" serverName="ray@10.12.1.147:22 password" remoteFilesAllowedToDisappearOnAutoupload="false" showDialogOnRemoteDnD="false" autoUploadExternalChanges="true" showAutoUploadSettingsWarning="false">
     <serverData>
-      <paths name="corona@10.0.0.12:22 password">
-        <serverdata>
-          <mappings>
-            <mapping deploy="/home/corona/attack/Fooling-Object-Detection-Network" local="$PROJECT_DIR$" />
-          </mappings>
-        </serverdata>
-      </paths>
-      <paths name="corona@10.0.0.12:22 password (3)">
-        <serverdata>
-          <mappings>
-            <mapping deploy="/home/corona/attack/Fooling-Object-Detection-Network" local="$PROJECT_DIR$" />
-          </mappings>
-        </serverdata>
-      </paths>
-      <paths name="corona@10.0.0.12:22 password (4)">
-        <serverdata>
-          <mappings>
-            <mapping deploy="/home/corona/attack/Fooling-Object-Detection-Network" local="$PROJECT_DIR$" />
-          </mappings>
-        </serverdata>
-      </paths>
-      <paths name="corona@172.16.75.78:22 password">
-        <serverdata>
-          <mappings>
-            <mapping deploy="/home/corona/attack/Fooling-Object-Detection-Network" local="$PROJECT_DIR$" />
-          </mappings>
-        </serverdata>
-      </paths>
-      <paths name="mist@gpu260.mistgpu.xyz:10040 password">
-        <serverdata>
-          <mappings>
-            <mapping deploy="/home/mist" local="$PROJECT_DIR$" web="/" />
-          </mappings>
-        </serverdata>
-      </paths>
-      <paths name="mist@gpu260.mistgpu.xyz:10050 password">
-        <serverdata>
-          <mappings>
-            <mapping deploy="/home/mist" local="$PROJECT_DIR$" />
-          </mappings>
-        </serverdata>
-      </paths>
       <paths name="ray@10.0.0.5:22 password">
         <serverdata>
           <mappings>
-            <mapping deploy="/home/corona/attack/Fooling-Object-Detection-Network" local="$PROJECT_DIR$" web="/" />
-          </mappings>
-        </serverdata>
-      </paths>
-      <paths name="ray@10.0.0.5:22 password (1)">
-        <serverdata>
-          <mappings>
-            <mapping deploy="/home/corona/attack/Fooling-Object-Detection-Network" local="$PROJECT_DIR$" web="/" />
-          </mappings>
-        </serverdata>
-      </paths>
-      <paths name="ray@10.0.0.5:22 password (2)">
-        <serverdata>
-          <mappings>
-            <mapping deploy="/home/corona/attack/Fooling-Object-Detection-Network" local="$PROJECT_DIR$" web="/" />
+            <mapping deploy="/home/ray/workspace/adv_team" local="$PROJECT_DIR$" web="/" />
           </mappings>
         </serverdata>
       </paths>
       <paths name="ray@10.12.1.147:22 password">
         <serverdata>
           <mappings>
-            <mapping deploy="/home/disk2/ray/workspace/coronapolvo/attack" local="$PROJECT_DIR$" />
+            <mapping deploy="/home/disk2/ray/workspace/Fly_Pluche" local="$PROJECT_DIR$" web="/" />
           </mappings>
           <excludedPaths>
             <excludedPath path="/home/disk2/ray/workspace/coronapolvo/attack/net/yolov3/model_data/yolo_weight_voc_608.pth" />

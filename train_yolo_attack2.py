@@ -38,7 +38,7 @@ class PatchTrainer(object):
         # self.name = 'Yolov3'
         self.model_ = Yolov3(self.config.model_path, self.config.model_image_size, self.config.classes_path)
         self.model_.set_image_size(self.config.img_size[0])
-        self.name = 'YOLO_with_coco_datasets2'
+        self.name = '八角 FFT_SIZE=24'
         self.log_path = self.config.log_path
         self.writer = self.init_tensorboard(name='base')
         self.init_logger()
@@ -238,7 +238,7 @@ class PatchTrainer(object):
                     # self.writer.add_scalar('loss/union_loss', union_attack_loss.detach().cpu().numpy(), iteration)
                     self.writer.add_scalar('loss/det_loss', det_loss.detach().cpu().numpy(), iteration)
                     # self.writer.add_image('patch', adv_patch.cpu(), iteration)
-                    self.writer.add_image('patch', adv_patch.cpu(), iteration)
+                    # self.writer.add_image('patch', adv_patch.cpu(), iteration)
                     plt.imshow(np.asarray(functional.to_pil_image(adv_patch_cpu)))
                     plt.show()
 
