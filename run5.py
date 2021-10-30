@@ -6,9 +6,11 @@ import os
 import setproctitle
 
 setproctitle.setproctitle("train_adversarial_patch_coronaPolvo")
-# os.environ["CUDA_VISIBLE_DEVICES"] = "3"
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "3"
+# os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 # os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+
+
 
 
 if __name__ == '__main__':

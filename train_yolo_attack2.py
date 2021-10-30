@@ -28,8 +28,6 @@ warnings.filterwarnings('ignore')
 torch.manual_seed(2233)
 torch.cuda.manual_seed(2233)
 np.random.seed(2233)
-
-
 class PatchTrainer(object):
     def __init__(self):
         super(PatchTrainer, self).__init__()
@@ -38,7 +36,7 @@ class PatchTrainer(object):
         # self.name = 'Yolov3'
         self.model_ = Yolov3(self.config.model_path, self.config.model_image_size, self.config.classes_path)
         self.model_.set_image_size(self.config.img_size[0])
-        self.name = '八角 FFT_SIZE=24'
+        self.name = '八角 FFT_SIZE=0'
         self.log_path = self.config.log_path
         self.writer = self.init_tensorboard(name='base')
         self.init_logger()
@@ -170,7 +168,7 @@ class PatchTrainer(object):
                 # union_attack_loss = self.entropy(predicted_id, attack_id)
 
                 print()
-                logging.info(f'epoch: {epoch} iter: {i_batch} |det loss: {det_loss}')
+                logging.info(f'epoch: {epoch} iter: {i_batch} |det loss: {det_loss},tv loss:{tv_loss},frequency loss:{frequency_loss}')
                 # logging.info(f'iou_loss: {iou_loss}')
                 # logging.info(f'conf_loss_union_image: {conf_loss_union_image}')
                 # logging.info(f"union_attack_loss: {union_attack_loss}")
@@ -193,10 +191,11 @@ class PatchTrainer(object):
                         # w_union_attack = N * rs[3] / sum_rs
 
                 # loss = w_det * det_loss + w_tv * tv_loss
-                print('tv_loss',tv_loss)
+                print('tv_loss*2.5',tv_loss*2.5)
+                print('frequency_loss * 0.0005',frequency_loss * 0.0005)
                 # loss = det_loss + tv_loss * 1.5 + ms_ssim_loss * 4
-                loss = det_loss + tv_loss * 2.5 + frequency_loss * 0.0005
-                # loss = det_loss + tv_loss * 2.5
+                # loss = det_loss + tv_loss * 2.5 + frequency_loss * 0.0005
+                loss = det_loss + tv_loss * 2.5
 
                 # print("f:",det_loss,tv_loss * 2.5, frequency_loss* 0.0005)
 
@@ -236,7 +235,9 @@ class PatchTrainer(object):
                     # self.writer.add_scalar('loss/conf_loss_union_image', conf_loss_union_image.detach().cpu().numpy(),
                     #                        iteration)
                     # self.writer.add_scalar('loss/union_loss', union_attack_loss.detach().cpu().numpy(), iteration)
-                    self.writer.add_scalar('loss/det_loss', det_loss.detach().cpu().numpy(), iteration)
+                    self.writer.add_scalar('det_loss', det_loss.detach().cpu().numpy(), iteration)
+                    self.writer.add_scalar('TV_loss', tv_loss.detach().cpu().numpy(), iteration)
+                    self.writer.add_scalar('Frequency_loss', frequency_loss.detach().cpu().numpy(), iteration)
                     # self.writer.add_image('patch', adv_patch.cpu(), iteration)
                     # self.writer.add_image('patch', adv_patch.cpu(), iteration)
                     plt.imshow(np.asarray(functional.to_pil_image(adv_patch_cpu)))
@@ -250,6 +251,7 @@ class PatchTrainer(object):
                 self.patch_evaluator.save_visual_images(adv_patch_cpu.clone(), self.image_save_path, epoch)
 
             # eval patch
+
             with torch.no_grad():
                 if self.is_cmyk:
                     adv_cmyk = adv_patch_cpu.clone()

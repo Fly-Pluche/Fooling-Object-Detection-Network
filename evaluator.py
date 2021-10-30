@@ -297,6 +297,7 @@ class FrequencyLoss(nn.Module):
     def forward(self, adv_patch):
         img_low_frequency, img_high_frequency = pytorch_fft(adv_patch, self.lpf, self.hpf)
         loss = torch.sum(img_high_frequency)
+        print('img_low_frequency*0.0005',torch.sum(img_low_frequency)*0.0005)
 
         # loss=loss-torch.sum(img_low_frequency)*0.0008
         # 改权重
