@@ -35,3 +35,18 @@ def pytorch_fft(img, lpf, hpf):
     img_low_frequency = torch.abs(fft.ifftn(f_l, dim=(2, 3)))
     img_high_frequency = torch.abs(fft.ifftn(f_h, dim=(2, 3)))
     return img_low_frequency, img_high_frequency
+
+def mask_fft(img, alpha):
+    """
+    Use dynamic mask to calculate the corresponding fft weight.
+    :param img:the img_patch you want to process
+    :param alpha: random tensor used to optimization to select the low and high frequency with better attack.
+    alpha:3xHxW
+    :return:a weighted img_path
+    """
+    f = fft.fftn(img.unsqueeze(0), dim=(2, 3))
+    f = torch.roll(f, (img.size(1) // 2, img.size(2) // 2), dims=(2, 3))
+    f = alpha * f
+    img_frequency = torch.abs(fft.ifftn(f, dim=(2, 3)))
+
+    return img_frequency

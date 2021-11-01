@@ -250,6 +250,7 @@ class TotalVariation(nn.Module):
     Module providing the functionality necessary to calculate the total vatiation (TV) of an adversarial patch.
 
     """
+
     def __init__(self):
         super(TotalVariation, self).__init__()
 
@@ -261,22 +262,21 @@ class TotalVariation(nn.Module):
         tvcomp2 = torch.sum(torch.sum(tvcomp2, 0), 0)
         tv = tvcomp1 + tvcomp2
 
-        tvcomp3= torch.sum(torch.abs(adv_patch[:, 1:, 1:] - adv_patch[:, :-1, :-1] + 0.000001), 0)
+        tvcomp3 = torch.sum(torch.abs(adv_patch[:, 1:, 1:] - adv_patch[:, :-1, :-1] + 0.000001), 0)
         tvcomp3 = torch.sum(torch.sum(tvcomp3, 0), 0)
-        tv=tv+tvcomp3
+        tv = tv + tvcomp3
 
-        tvcomp4= torch.sum(torch.abs(adv_patch[:, 1:, :-1] - adv_patch[:, :-1, 1:] + 0.000001), 0)
+        tvcomp4 = torch.sum(torch.abs(adv_patch[:, 1:, :-1] - adv_patch[:, :-1, 1:] + 0.000001), 0)
         tvcomp4 = torch.sum(torch.sum(tvcomp4, 0), 0)
-        tv=tv+tvcomp4
+        tv = tv + tvcomp4
 
         return tv / torch.numel(adv_patch)
 
 
 class FrequencyLoss(nn.Module):
-    """TotalVariation: calculates the total variation of a.json patch.
-
+    """
+    TotalVariation: calculates the total variation of a.json patch.
     Module providing the functionality necessary to calculate the total vatiation (TV) of an adversarial patch.
-
     """
 
     def __init__(self, config):
@@ -294,14 +294,13 @@ class FrequencyLoss(nn.Module):
         self.lpf = lpf.cuda()
         self.hpf = hpf.cuda()
 
-    def forward(self, adv_patch):
-        img_low_frequency, img_high_frequency = pytorch_fft(adv_patch, self.lpf, self.hpf)
-        loss = torch.sum(img_high_frequency)
-        print('img_low_frequency*0.0005',torch.sum(img_low_frequency)*0.0005)
-
-        # loss=loss-torch.sum(img_low_frequency)*0.0008
-        # 改权重
-        return loss
+    def forward(self, adv_patch, mask1=None):
+        if mask1 != None:
+            img_frequency = mask_fft(adv_patch, mask1)
+            return torch.sum(img_frequency)
+        else:
+            img_low_frequency, img_high_frequency = pytorch_fft(adv_patch, self.lpf, self.hpf)
+            return torch.sum(img_high_frequency)
 
 
 def _fspecial_gauss_1d(size, sigma):
@@ -311,11 +310,13 @@ def _fspecial_gauss_1d(size, sigma):
     g /= g.sum()
     return g.unsqueeze(0).unsqueeze(0)
 
+
 def gaussian_filter(input, win):
     N, C, H, W = input.shape
     out = F.conv2d(input, win, stride=1, padding=0, groups=C)
     out = F.conv2d(out, win.transpose(2, 3), stride=1, padding=0, groups=C)
     return out
+
 
 def _ssim(X, Y, win, data_range=1023, size_average=True, full=False):
     K1 = 0.01
@@ -354,6 +355,7 @@ def _ssim(X, Y, win, data_range=1023, size_average=True, full=False):
     else:
         return ssim_val
 
+
 def ssim(X, Y, win_size=11, win_sigma=10, win=None, data_range=1, size_average=True, full=False):
     if len(X.shape) != 4:
         raise ValueError('Input images must 4-d tensor.')
@@ -387,6 +389,7 @@ def ssim(X, Y, win_size=11, win_sigma=10, win=None, data_range=1, size_average=T
         return ssim_val, cs
     else:
         return ssim_val
+
 
 def ms_ssim(X, Y, win_size=11, win_sigma=10, win=None, data_range=1, size_average=True, full=False, weights=None):
     if len(X.shape) != 4:
@@ -435,6 +438,7 @@ def ms_ssim(X, Y, win_size=11, win_sigma=10, win=None, data_range=1, size_averag
         msssim_val = msssim_val.mean()
     return msssim_val
 
+
 # Classes to re-use window
 class SSIM(torch.nn.Module):
     def __init__(self, win_size=11, win_sigma=1.5, data_range=255, size_average=True, channel=3):
@@ -447,6 +451,7 @@ class SSIM(torch.nn.Module):
     def forward(self, X, Y):
         return ssim(X, Y, win=self.win, data_range=self.data_range, size_average=self.size_average)
 
+
 class MS_SSIMLOSS(nn.Module):
     def __init__(self, win_size=11, win_sigma=1.5, data_range=255, size_average=True, channel=3, weights=None):
         super(MS_SSIMLOSS, self).__init__()
@@ -457,11 +462,12 @@ class MS_SSIMLOSS(nn.Module):
         self.weights = weights
 
     def forward(self, X):
-        X=X.unsqueeze(0)
-        Y=X[:,:,1:,1:]
-        X=X[:,:,:-1,:-1]
+        X = X.unsqueeze(0)
+        Y = X[:, :, 1:, 1:]
+        X = X[:, :, :-1, :-1]
         return ms_ssim(X, Y, win=self.win, size_average=self.size_average, data_range=self.data_range,
                        weights=self.weights)
+
 
 class UnionDetector(nn.Module):
     def __init__(self):
