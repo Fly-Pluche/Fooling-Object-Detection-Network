@@ -29,7 +29,8 @@ class PatchTrainer(object):
         # self.name = 'Yolov3'
         self.model_ = Yolov3(self.config.model_path, self.config.model_image_size, self.config.classes_path)
         self.model_.set_image_size(self.config.img_size[0])
-        self.name = '八角 ab_mask_FFT_SIZE'
+        self.name = '四角 无frequency loss'
+        # self.name = '八角 mask_FFT 无frequency loss'
         self.log_path = self.config.log_path
         self.writer = self.init_tensorboard(name='base')
         self.init_logger()
@@ -86,7 +87,7 @@ class PatchTrainer(object):
             drop_last=True
         )
         test_data = DataLoader(
-            ListDataset(self.config.coco_val_txt, number=20),
+            ListDataset(self.config.coco_val_txt),
             num_workers=16,
             batch_size=self.config.batch_size,
             drop_last=True
@@ -103,8 +104,8 @@ class PatchTrainer(object):
         adv_patch_cpu = self.generate_patch(load_from_file, is_random, is_cmyk=self.is_cmyk)
         adv_patch_cpu.requires_grad_(True)
 
-        adv_mask_cpu = self.generate_patch(load_from_file=None, is_random=True, is_cmyk=self.is_cmyk)
-        adv_mask_cpu.requires_grad_(True)
+        # adv_mask_cpu = self.generate_patch(load_from_file=None, is_random=True, is_cmyk=self.is_cmyk)
+        # adv_mask_cpu.requires_grad_(True)
 
 
         if self.config.optim == 'adam':
@@ -113,16 +114,16 @@ class PatchTrainer(object):
                                                         self.config.gamma)  # used to update learning rate
 
             optimizer2 = torch.optim.Adam([adv_mask_cpu], lr=self.config.start_learning_rate)
-            scheduler = torch.optim.lr_scheduler.StepLR(optimizer2, self.config.step_size,
+            scheduler2 = torch.optim.lr_scheduler.StepLR(optimizer2, self.config.step_size,
                                                         self.config.gamma)  # used to update learning rate
         elif self.config.optim == 'sgd':
             optimizer1 = optim.SGD([adv_patch_cpu], momentum=0.9, lr=self.config.start_learning_rate)
             scheduler = optim.lr_scheduler.MultiStepLR(optimizer1, milestones=[10, 25, 60, 100, 190], gamma=0.5,
                                                        last_epoch=-1)
 
-            optimizer2 = optim.SGD([adv_mask_cpu], momentum=0.9, lr=self.config.start_learning_rate)
-            scheduler = optim.lr_scheduler.MultiStepLR(optimizer2, milestones=[10, 25, 60, 100, 190], gamma=0.5,
-                                                       last_epoch=-1)
+            # optimizer2 = optim.SGD([adv_mask_cpu], momentum=0.9, lr=self.config.start_learning_rate)
+            # scheduler = optim.lr_scheduler.MultiStepLR(optimizer2, milestones=[10, 25, 60, 100, 190], gamma=0.5,
+            #                                            last_epoch=-1)
 
         else:
             raise ValueError("Optimizer can only be adam or sgd!")
@@ -157,7 +158,7 @@ class PatchTrainer(object):
                 labels_batch = labels_batch.cuda()
                 people_boxes = people_boxes.cuda()
                 adv_patch = adv_patch_cpu.cuda()
-                adv_mask = adv_mask_cpu.cuda()
+                # adv_mask = adv_mask_cpu.cuda()
                 if self.is_cmyk:
                     adv_patch = CMYK2RGB(adv_patch)
                 # Attach the attack image to the clothing
@@ -169,7 +170,7 @@ class PatchTrainer(object):
 
                 det_loss = torch.mean(self.max_extractor(self.model_, p_img_batch))
                 tv_loss = self.total_variation(adv_patch)
-                frequency_loss = self.frequency_loss(adv_patch, adv_mask)
+                # frequency_loss = self.frequency_loss(adv_patch, adv_mask)
                 # ms_ssim_loss=1-self.ms_ssim_loss(((adv_patch + 1) * 127).cpu().detach())
 
                 # predicted_id, attack_id = self.union_detector(self.model_, image_batch, p_img_batch, people_boxes_batch)
@@ -204,8 +205,10 @@ class PatchTrainer(object):
                 # print('frequency_loss * 0.0005', frequency_loss * 0.0005)
                 # loss = det_loss + tv_loss * 1.5 + ms_ssim_loss * 4
                 loss1 = det_loss + tv_loss * 2.5
-                loss2 = frequency_loss * 0.0005
-                loss = loss2 + loss1
+                # loss2 = frequency_loss * 0.0005
+                # loss2 = 0
+                # loss = loss2 + loss1
+                loss=loss1
                 # loss = det_loss + tv_loss * 2.5
 
                 # print("f:",det_loss,tv_loss * 2.5, frequency_loss* 0.0005)
@@ -237,11 +240,11 @@ class PatchTrainer(object):
                 # print(adv_patch_cpu.grad)
                 optimizer1.step()
                 optimizer1.zero_grad()
-                optimizer2.step()
-                optimizer2.zero_grad()
+                # optimizer2.step()
+                # optimizer2.zero_grad()
 
                 adv_patch_cpu.data.clamp_(0, 1)  # keep patch in image range
-                adv_mask_cpu.data.clamp_(0, 1)
+                # adv_mask_cpu.data.clamp_(0, 1)
                 if i_batch % 23 == 0:
                     iteration = epoch_length * epoch + i_batch
                     # self.writer.add_scalar('total_loss', loss.detach().cpu().numpy(), iteration)
@@ -258,7 +261,8 @@ class PatchTrainer(object):
                     plt.imshow(np.asarray(functional.to_pil_image(adv_patch_cpu)))
                     plt.show()
 
-                del adv_batch_t, p_img_batch, det_loss, frequency_loss, tv_loss, loss1, loss2
+                del adv_batch_t, p_img_batch, det_loss, frequency_loss, tv_loss, loss1
+                # del adv_batch_t, p_img_batch, det_loss, frequency_loss, tv_loss, loss1, loss2
                 # torch.cuda.empty_cache()
 
             # visual attack effection
@@ -308,6 +312,7 @@ class PatchTrainer(object):
             ep_det_loss = ep_det_loss / len(train_data)
             ep_loss = ep_loss / len(train_data)
             scheduler.step()
+            scheduler2.step()
 
             if True:
                 logging.info(f'epoch: {epoch}| EPOCH NR: {epoch}'),

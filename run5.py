@@ -20,5 +20,6 @@ if __name__ == '__main__':
         # sys.path.append('/home/corona/attack/Fooling-Object-Detection-Network')
     trainer = PatchTrainer()
     load_from_file='/home/disk2/ray/workspace/Fly_Pluche/random_patch.png'
+
     is_random=False
     trainer.train(load_from_file,is_random)
