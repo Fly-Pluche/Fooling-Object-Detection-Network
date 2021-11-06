@@ -30,7 +30,7 @@ class PatchTrainer(object):
         self.model_ = Yolov3(self.config.model_path, self.config.model_image_size, self.config.classes_path)
         self.model_.set_image_size(self.config.img_size[0])
         # self.name = '四角 无frequency loss'
-        self.name = '八角 mask_FFT 有frequency loss'
+        self.name = '八角 mask_FFT的平方 有frequency loss'
         self.log_path = self.config.log_path
         self.writer = self.init_tensorboard(name='base')
         self.init_logger()
@@ -170,7 +170,7 @@ class PatchTrainer(object):
 
                 det_loss = torch.mean(self.max_extractor(self.model_, p_img_batch))
                 tv_loss = self.total_variation(adv_patch)
-                frequency_loss = self.frequency_loss(adv_patch, adv_mask)
+                frequency_loss = self.frequency_loss(adv_patch, adv_mask**2)
                 # ms_ssim_loss=1-self.ms_ssim_loss(((adv_patch + 1) * 127).cpu().detach())
 
                 # predicted_id, attack_id = self.union_detector(self.model_, image_batch, p_img_batch, people_boxes_batch)
@@ -301,7 +301,9 @@ class PatchTrainer(object):
                         adv_cmyk.save(name2)
                 if float(ASR) > max_asr:
                     name = os.path.join(self.log_path, str(float(ASR) * 100)[:4] + '_asr')
+                    name2 = os.path.join(self.log_path, str(float(ASR) * 100)[:4] + '_mask')
                     torchvision.utils.save_image(adv, name + '.png')
+                    torchvision.utils.save_image(adv_mask_cpu, name2 + '.png')
                     torch2raw(adv, name + '.raw')
                     max_asr = float(ASR)
 
