@@ -30,7 +30,7 @@ class PatchTrainer(object):
         self.model_ = Yolov3(self.config.model_path, self.config.model_image_size, self.config.classes_path)
         self.model_.set_image_size(self.config.img_size[0])
         # self.name = '四角 无frequency loss'
-        self.name = '八角 mask_FFT的平方 有frequency loss'
+        self.name = '八角 mask_FFT 隐式训练 有frequency loss'
         self.log_path = self.config.log_path
         self.writer = self.init_tensorboard(name='base')
         self.init_logger()
@@ -159,6 +159,8 @@ class PatchTrainer(object):
                 people_boxes = people_boxes.cuda()
                 adv_patch = adv_patch_cpu.cuda()
                 adv_mask = adv_mask_cpu.cuda()
+                #隐式训练
+                adv_patch = adv_patch * adv_mask
                 if self.is_cmyk:
                     adv_patch = CMYK2RGB(adv_patch)
                 # Attach the attack image to the clothing
@@ -170,7 +172,7 @@ class PatchTrainer(object):
 
                 det_loss = torch.mean(self.max_extractor(self.model_, p_img_batch))
                 tv_loss = self.total_variation(adv_patch)
-                frequency_loss = self.frequency_loss(adv_patch, adv_mask**2)
+                frequency_loss = self.frequency_loss(adv_patch, adv_mask)
                 # ms_ssim_loss=1-self.ms_ssim_loss(((adv_patch + 1) * 127).cpu().detach())
 
                 # predicted_id, attack_id = self.union_detector(self.model_, image_batch, p_img_batch, people_boxes_batch)
