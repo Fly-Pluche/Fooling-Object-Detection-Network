@@ -159,7 +159,7 @@ class PatchTrainer(object):
                 adv_patch = adv_patch_cpu.cuda()
                 adv_mask = adv_mask_cpu.cuda()
                 # 隐式训练
-                adv_patch = mask_fft(adv_patch, adv_mask)
+                adv_patch = mask_fft(adv_patch, adv_mask).squeeze(0)
                 if self.is_cmyk:
                     adv_patch = CMYK2RGB(adv_patch)
                 # Attach the attack image to the clothing
