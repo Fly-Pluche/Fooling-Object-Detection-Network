@@ -4,6 +4,7 @@ from torchvision.transforms import functional
 import numpy as np
 from PIL import Image
 import torchvision
+from torchvision import transforms
 
 def boxes_scale(boxes, img_size, target_img_size):
     """
@@ -67,3 +68,21 @@ def read_image_torch(img_path):
     img = Image.open(img_path)
     img = functional.pil_to_tensor(img) / 255.0
     return img
+
+
+def generate_patch(config, load_from_file=None, is_random=False, is_cmyk=0):
+    # load a image from local patch
+    if load_from_file is not None:
+        patch = Image.open(load_from_file)
+        patch = patch.resize((config.patch_size, config.patch_size))
+        patch = transforms.PILToTensor()(patch) / 255.
+        return patch
+    if is_random:
+        if is_cmyk:
+            return torch.rand((4, config.patch_size, config.patch_size))
+        else:
+            return torch.rand((3, config.patch_size, config.patch_size))
+    if is_cmyk:
+        return torch.full((4, config.patch_size, config.patch_size), 0.5)
+    else:
+        return torch.full((3, config.patch_size, config.patch_size), 0.5)

@@ -184,17 +184,29 @@ if __name__ == '__main__':
     # plt.show()
     import os
 
-    os.environ["CUDA_VISIBLE_DEVICES"] = "3"
-    image = Image.open('./paper_images/big_high_pig_rev.png')
+    os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+    image_name = './paper_images/p800_low'
+    image_name_result = image_name + '_result' + '.png'
+    image = Image.open(f'{image_name}.png')
+
     image = functional.pil_to_tensor(image) / 255.0
+
     image = image.cuda()
     config = patch_configs['base']()  # load base config
     model_ = Yolov3(config.model_path, config.model_image_size, config.classes_path)
-    model_.confidence_predict = 0.0001
-    model_.confidence = 0.0001
+    model_.confidence_predict = 0.01
+    # model_.confidence = 0.0001
     model_.set_image_size(image.shape[1])
     out = model_.yolo_predictor(image, nms=True)
+    pred_classes = out['instances'].pred_classes
+    pred_boxes = out['instances'].pred_boxes.tensor
+    result = Instances((image.shape[1], image.shape[1]))
+    result.set("pred_classes", pred_classes[pred_classes == 14])
+    result.set("pred_boxes", Boxes(pred_boxes[pred_classes == 14]))
+    result.set("scores", out['instances'].scores[pred_classes == 14])
+    out['instances'] = result
     re = model_.visual_instance_predictions(image, out)
+    cv2.imwrite(image_name_result, re)
     plt.imshow(re)
     plt.show()
     print(out)

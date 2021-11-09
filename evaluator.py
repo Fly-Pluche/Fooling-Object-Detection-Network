@@ -262,9 +262,16 @@ class TotalVariation(nn.Module):
         tvcomp1 = torch.sum(torch.sum(tvcomp1, 0), 0)
         tvcomp2 = torch.sum(torch.abs(adv_patch[:, 1:, :] - adv_patch[:, :-1, :] + 0.000001), 0)
         tvcomp2 = torch.sum(torch.sum(tvcomp2, 0), 0)
-        tvcomp3 = torch.sum(torch.abs(adv_patch[:, 1:, 1:] - adv_patch[:, :-1, :-1] + 0.000001), 0)
+        tv = tvcomp1 + tvcomp2
+
+        tvcomp3= torch.sum(torch.abs(adv_patch[:, 1:, 1:] - adv_patch[:, :-1, :-1] + 0.000001), 0)
         tvcomp3 = torch.sum(torch.sum(tvcomp3, 0), 0)
-        tv = tvcomp1 + tvcomp2 + tvcomp3
+
+        tvcomp4= torch.sum(torch.abs(adv_patch[:, 1:, :-1] - adv_patch[:, :-1, 1:] + 0.000001), 0)
+        tvcomp4 = torch.sum(torch.sum(tvcomp4, 0), 0)
+
+        tv=tv+tvcomp3+tvcomp4
+
         return tv / torch.numel(adv_patch)
 
 
@@ -281,7 +288,7 @@ class FrequencyLoss(nn.Module):
         img_h = self.config.patch_size
         img_w = self.config.patch_size
         lpf = torch.zeros((img_h, img_h))
-        R = (img_h + img_w) // 8
+        R = (img_h + img_w) // 4.5
         for x in range(img_w):
             for y in range(img_h):
                 if ((x - (img_w - 1) / 2) ** 2 + (y - (img_h - 1) / 2) ** 2) < (R ** 2):

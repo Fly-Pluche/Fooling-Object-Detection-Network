@@ -170,9 +170,9 @@ class BaseASR(nn.Module):
 
     def judge_box_type(self, box):
         area = self.calculate_box_area(box)
-        if area / (self.image_size[0] * self.image_size[1]) < 0.003:
+        if area / (self.image_size[0] * self.image_size[1]) < 0.08:
             return 'small'
-        elif 0.003 < area / (self.image_size[0] * self.image_size[1]) < 0.03:
+        elif 0.08 < area / (self.image_size[0] * self.image_size[1]) < 0.16:
             return 'middle'
         else:
             return 'big'
@@ -199,8 +199,11 @@ class ObjectVanishingASR(BaseASR):
             gt_boxes = self.dataset_dicts[i]['bbox']
             pre_boxes = predicted_dict['bbox']
             for j in range(gt_boxes.shape[0]):
+                box_type = self.judge_box_type(gt_boxes[j])
                 if len(pre_boxes) == 0:
                     success_boxes_number += 1
+                    boxes_success_number[box_type] += 1
+                    boxes_total_number[box_type] += 1
                     continue
                 ixmin = np.maximum(pre_boxes[:, 0], gt_boxes[j, 0])
                 iymin = np.maximum(pre_boxes[:, 1], gt_boxes[j, 1])
@@ -213,7 +216,6 @@ class ObjectVanishingASR(BaseASR):
                          (pre_boxes[:, 2] - pre_boxes[:, 0]) *
                          (pre_boxes[:, 3] - pre_boxes[:, 1]) - inters)
                 iou = np.max(inters / union)
-                box_type = self.judge_box_type(gt_boxes[j])
                 boxes_total_number[box_type] += 1
                 if iou < 0.5:
                     success_boxes_number += 1

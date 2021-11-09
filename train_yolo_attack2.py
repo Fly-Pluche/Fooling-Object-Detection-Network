@@ -79,17 +79,19 @@ class PatchTrainer(object):
         optimizer a adversarial patch
         """
         # load train datasets
-        datasets = ListDataset(self.config.coco_train_txt, number=6000)
+        datasets = ListDataset(self.config.coco_train_txt)
         train_data = DataLoader(
             datasets,
             batch_size=self.config.batch_size,
             num_workers=16,
             shuffle=True,
+            drop_last=True
         )
         test_data = DataLoader(
-            ListDataset(self.config.coco_val_txt, number=2000),
+            ListDataset(self.config.coco_val_txt),
             num_workers=16,
-            batch_size=self.config.batch_size
+            batch_size=self.config.batch_size,
+            drop_last=True
         )
         self.patch_evaluator = PatchEvaluator(self.model_, test_data, use_deformation=False).cuda()
         self.asr_calculate = ObjectVanishingASR(self.config.img_size, use_deformation=False)
@@ -97,14 +99,14 @@ class PatchTrainer(object):
         epoch_length = len(train_data)
 
         # generate a rgb patch
-        adv_patch_cpu = self.generate_patch(
-            load_from_file='./logs/20211001-153330_base_YOLO_with_coco_datasets2/86.6_asr.png',
-            is_cmyk=self.is_cmyk)
-        # adv_patch_cpu = self.generate_patch(is_random=True, is_cmyk=self.is_cmyk)
+        # adv_patch_cpu = self.generate_patch(
+        #     load_from_file='./logs/20211001-153330_base_YOLO_with_coco_datasets2/86.6_asr.png',
+        #     is_cmyk=self.is_cmyk)
+        adv_patch_cpu = self.generate_patch(is_random=True, is_cmyk=self.is_cmyk)
         adv_patch_cpu.requires_grad_(True)
 
         if self.config.optim == 'adam':
-            optimizer = torch.optim.Adam([adv_patch_cpu], lr=self.config.start_learning_rate)
+            optimizer = torch.optim.Adam([adv_patch_cpu], lr=self.config.start_learning_rate)x
             scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=50,
                                                         gamma=0.5)  # used to update learning rate
         elif self.config.optim == 'sgd':
