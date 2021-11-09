@@ -49,4 +49,4 @@ def mask_fft(img, alpha):
     f = alpha * f
     img_frequency = torch.abs(fft.ifftn(f, dim=(2, 3)))
 
-    return img_frequency
+    return img_frequency.squeeze(0)
