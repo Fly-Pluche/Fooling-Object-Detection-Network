@@ -257,7 +257,7 @@ class PatchTrainer(object):
                     # self.writer.add_scalar('loss/union_loss', union_attack_loss.detach().cpu().numpy(), iteration)
                     self.writer.add_scalar('det_loss', det_loss.detach().cpu().numpy(), iteration)
                     self.writer.add_scalar('TV_loss', tv_loss.detach().cpu().numpy(), iteration)
-                    self.writer.add_scalar('Frequency_loss', frequency_loss.detach().cpu().numpy(), iteration)
+                    # self.writer.add_scalar('Frequency_loss', frequency_loss.detach().cpu().numpy(), iteration)
                     # self.writer.add_image('patch', adv_patch.cpu(), iteration)
                     # self.writer.add_image('patch', adv_patch.cpu(), iteration)
                     plt.imshow(np.asarray(functional.to_pil_image(adv_patch_cpu)))
