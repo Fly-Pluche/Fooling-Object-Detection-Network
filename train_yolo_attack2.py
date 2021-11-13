@@ -30,7 +30,7 @@ class PatchTrainer(object):
         self.model_ = Yolov3(self.config.model_path, self.config.model_image_size, self.config.classes_path)
         self.model_.set_image_size(self.config.img_size[0])
         # self.name = '四角 无frequency loss'
-        self.name = '八角 mask_FFT 隐式训练'
+        self.name = '八角 mask_FFT_显式训练 50step'
         self.log_path = self.config.log_path
         self.writer = self.init_tensorboard(name='base')
         self.init_logger()
@@ -159,7 +159,7 @@ class PatchTrainer(object):
                 adv_patch = adv_patch_cpu.cuda()
                 adv_mask = adv_mask_cpu.cuda()
                 # 隐式训练
-                adv_patch = mask_fft(adv_patch, adv_mask).squeeze(0)
+                # adv_patch = mask_fft(adv_patch, adv_mask).squeeze(0)
                 if self.is_cmyk:
                     adv_patch = CMYK2RGB(adv_patch)
                 # Attach the attack image to the clothing
@@ -171,8 +171,8 @@ class PatchTrainer(object):
 
                 det_loss = torch.mean(self.max_extractor(self.model_, p_img_batch))
                 tv_loss = self.total_variation(adv_patch)
-                # frequency_loss = self.frequency_loss(adv_patch, adv_mask)
-                frequency_loss = 0
+                frequency_loss = self.frequency_loss(adv_patch, adv_mask)
+                # frequency_loss = 0
                 # ms_ssim_loss=1-self.ms_ssim_loss(((adv_patch + 1) * 127).cpu().detach())
 
                 # predicted_id, attack_id = self.union_detector(self.model_, image_batch, p_img_batch, people_boxes_batch)
@@ -207,10 +207,10 @@ class PatchTrainer(object):
                 # print('frequency_loss * 0.0005', frequency_loss * 0.0005)
                 # loss = det_loss + tv_loss * 1.5 + ms_ssim_loss * 4
                 loss1 = det_loss + tv_loss * 2.5
-                # loss2 = frequency_loss * 0.0005
+                loss2 = frequency_loss * 0.0005
                 # loss2 = 0
-                # loss = loss2 + loss1
-                loss = loss1
+                loss = loss2 + loss1
+                # loss = loss1
                 # loss = det_loss + tv_loss * 2.5
 
                 # print("f:",det_loss,tv_loss * 2.5, frequency_loss* 0.0005)
@@ -257,7 +257,7 @@ class PatchTrainer(object):
                     # self.writer.add_scalar('loss/union_loss', union_attack_loss.detach().cpu().numpy(), iteration)
                     self.writer.add_scalar('det_loss', det_loss.detach().cpu().numpy(), iteration)
                     self.writer.add_scalar('TV_loss', tv_loss.detach().cpu().numpy(), iteration)
-                    # self.writer.add_scalar('Frequency_loss', frequency_loss.detach().cpu().numpy(), iteration)
+                    self.writer.add_scalar('Frequency_loss', frequency_loss.detach().cpu().numpy(), iteration)
                     # self.writer.add_image('patch', adv_patch.cpu(), iteration)
                     # self.writer.add_image('patch', adv_patch.cpu(), iteration)
                     plt.imshow(np.asarray(functional.to_pil_image(adv_patch_cpu)))
@@ -340,6 +340,7 @@ class PatchTrainer(object):
             # torch.cuda.empty_cache()
 
     def generate_patch(self, load_from_file=None, is_random=False, is_cmyk=0):
+        print('load_from_file',load_from_file)
         # load a image from local patch
         if load_from_file is not None:
             if 'raw' in load_from_file:
