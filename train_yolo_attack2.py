@@ -73,7 +73,7 @@ class PatchTrainer(object):
         else:
             return SummaryWriter()
 
-    def train(self, load_from_file=None, is_random=True):
+    def train(self, load_patch_from_file=None, load_mask_from_file=None,is_random=True):
         """
          optimizer a adversarial patch
         """
@@ -101,10 +101,10 @@ class PatchTrainer(object):
         # adv_patch_cpu = self.generate_patch(
         #     load_from_file='./logs/20210913-192713_base_YOLO_with_coco_datasets2/87.9_asr.png',
         #     is_cmyk=self.is_cmyk)
-        adv_patch_cpu = self.generate_patch(load_from_file, is_random, is_cmyk=self.is_cmyk)
+        adv_patch_cpu = self.generate_patch(load_patch_from_file, is_random, is_cmyk=self.is_cmyk)
         adv_patch_cpu.requires_grad_(True)
 
-        adv_mask_cpu = self.generate_patch(load_from_file=None, is_random=True, is_cmyk=self.is_cmyk)
+        adv_mask_cpu = self.generate_patch(load_mask_from_file, is_random=True, is_cmyk=self.is_cmyk)
         adv_mask_cpu.requires_grad_(True)
 
         if self.config.optim == 'adam':
