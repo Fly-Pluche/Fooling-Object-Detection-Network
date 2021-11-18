@@ -1,25 +1,18 @@
 from __future__ import absolute_import
 
-import time
-import logging
-import numpy as np
-import torchvision
-from torch.utils.data import DataLoader
+import warnings
+
+import torch.cuda
 from torch.utils.tensorboard import SummaryWriter
-from torchvision import transforms
-from tqdm import tqdm
-from asr import ObjectVanishingASR
+
 from evaluator import *
 from evaluator import PatchEvaluator
-from load_data import ListDatasetAnn
-from models import *
-import matplotlib.pyplot as plt
 from patch import *
 from patch_config import *
 from utils.transforms import CMYK2RGB
 from utils.utils import *
-import warnings
 
+os.environ["CUDA_VISIBLE_DEVICES"] = "0,1"
 warnings.filterwarnings('ignore')
 
 # set random seed
@@ -36,7 +29,8 @@ class PatchTrainer(object):
         # self.name = 'Yolov3'
         self.model_ = Yolov3(self.config.model_path, self.config.model_image_size, self.config.classes_path)
         self.model_.set_image_size(self.config.img_size[0])
-        self.name = 'YOLO_with_coco_datasets2'
+        # self.name = '四角 无frequency loss'
+        self.name = '八角 mask_FFT_显式训练 50step'
         self.log_path = self.config.log_path
         self.writer = self.init_tensorboard(name='base')
         self.init_logger()
@@ -48,6 +42,7 @@ class PatchTrainer(object):
         self.total_variation = TotalVariation().cuda()
         self.union_detector = UnionDetectorBCE().cuda()
         self.frequency_loss = FrequencyLoss(self.config).cuda()
+        self.ms_ssim_loss = MS_SSIMLOSS().cuda()
         self.patch_evaluator = None
         self.entropy = nn.BCELoss()
         self.is_cmyk = self.config.is_cmyk
@@ -58,9 +53,13 @@ class PatchTrainer(object):
         filename = os.path.join(self.log_path, 'log.log')
         logging.basicConfig(filename=filename, level=logging.DEBUG, format=LOG_FORMAT)
         logging.info(f'start learning rate: {self.config.start_learning_rate}')
+        logging.info(f'step_size: {self.config.step_size}')
+        logging.info(f'gamma: {self.config.gamma}')
         logging.info(f'patch size: {self.config.patch_size}')
         logging.info(f'batch size: {self.config.batch_size}')
         logging.info(f'img size: {self.config.img_size}')
+        logging.info(f'fft_size:{self.config.fft_size}')
+        logging.info(f'model image size: {self.config.model_image_size}')
         logging.info(f'cmyk: : {self.config.is_cmyk}')
         logging.info(f'optimizer: {self.config.optim}')
         logging.info(f'patch scale: {self.config.patch_scale}')
@@ -74,9 +73,9 @@ class PatchTrainer(object):
         else:
             return SummaryWriter()
 
-    def train(self):
+    def train(self, load_patch_from_file=None, load_mask_from_file=None, is_random=True):
         """
-        optimizer a adversarial patch
+         optimizer a adversarial patch
         """
         # load train datasets
         datasets = ListDataset(self.config.coco_train_txt)
@@ -100,19 +99,28 @@ class PatchTrainer(object):
 
         # generate a rgb patch
         # adv_patch_cpu = self.generate_patch(
-        #     load_from_file='./logs/20211001-153330_base_YOLO_with_coco_datasets2/86.6_asr.png',
-        #     is_cmyk=self.is_cmyk)
-        adv_patch_cpu = self.generate_patch(is_random=True, is_cmyk=self.is_cmyk)
         adv_patch_cpu.requires_grad_(True)
 
+        adv_mask_cpu = self.generate_patch(load_mask_from_file, is_random=True, is_cmyk=self.is_cmyk)
+        adv_mask_cpu.requires_grad_(True)
+
         if self.config.optim == 'adam':
-            optimizer = torch.optim.Adam([adv_patch_cpu], lr=self.config.start_learning_rate)x
-            scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=50,
-                                                        gamma=0.5)  # used to update learning rate
+            optimizer1 = torch.optim.Adam([adv_patch_cpu], lr=self.config.start_learning_rate)
+            scheduler = torch.optim.lr_scheduler.StepLR(optimizer1, self.config.step_size,
+                                                        self.config.gamma)  # used to update learning rate
+
+            optimizer2 = torch.optim.Adam([adv_mask_cpu], lr=self.config.start_learning_rate)
+            scheduler2 = torch.optim.lr_scheduler.StepLR(optimizer2, self.config.step_size,
+                                                         self.config.gamma)  # used to update learning rate
         elif self.config.optim == 'sgd':
-            optimizer = optim.SGD([adv_patch_cpu], momentum=0.9, lr=self.config.start_learning_rate)
-            scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[10, 25, 60, 100, 190], gamma=0.5,
+            optimizer1 = optim.SGD([adv_patch_cpu], momentum=0.9, lr=self.config.start_learning_rate)
+            scheduler = optim.lr_scheduler.MultiStepLR(optimizer1, milestones=[10, 25, 60, 100, 190], gamma=0.5,
                                                        last_epoch=-1)
+
+            optimizer2 = optim.SGD([adv_mask_cpu], momentum=0.9, lr=self.config.start_learning_rate)
+            scheduler2 = optim.lr_scheduler.MultiStepLR(optimizer2, milestones=[10, 25, 60, 100, 190], gamma=0.5,
+                                                        last_epoch=-1)
+
         else:
             raise ValueError("Optimizer can only be adam or sgd!")
         # Parameters to initialize some dynamically updated weights
@@ -131,7 +139,7 @@ class PatchTrainer(object):
         # start training
         min_ap = 1
         max_asr = 0
-        for epoch in range(100000):
+        for epoch in range(10000):
             ep_iou_all = 0
             ep_det_loss = 0
             ep_conf_union_loss = 0
@@ -139,15 +147,16 @@ class PatchTrainer(object):
             ep_tv_loss = 0
             ep_loss = 0
             i_batch = 0
-            for image_batch, people_boxes, labels_batch in tqdm(
-                    train_data):
+            for image_batch, people_boxes, labels_batch in tqdm(train_data):
                 i_batch += 1
                 print(self.log_path)
                 image_batch = image_batch.cuda()
                 labels_batch = labels_batch.cuda()
                 people_boxes = people_boxes.cuda()
                 adv_patch = adv_patch_cpu.cuda()
-
+                adv_mask = adv_mask_cpu.cuda()
+                # 隐式训练
+                # adv_patch = mask_fft(adv_patch, adv_mask).squeeze(0)
                 if self.is_cmyk:
                     adv_patch = CMYK2RGB(adv_patch)
                 # Attach the attack image to the clothing
@@ -156,14 +165,19 @@ class PatchTrainer(object):
                 p_img_batch = F.interpolate(p_img_batch, (self.config.img_size[1], self.config.img_size[0]),
                                             mode='bilinear')
                 # calculate each part of the loss
+
                 det_loss = torch.mean(self.max_extractor(self.model_, p_img_batch))
                 tv_loss = self.total_variation(adv_patch)
-                frequency_loss = self.frequency_loss(adv_patch)
+                frequency_loss = self.frequency_loss(adv_patch, adv_mask)
+                # frequency_loss = 0
+                # ms_ssim_loss=1-self.ms_ssim_loss(((adv_patch + 1) * 127).cpu().detach())
+
                 # predicted_id, attack_id = self.union_detector(self.model_, image_batch, p_img_batch, people_boxes_batch)
                 # union_attack_loss = self.entropy(predicted_id, attack_id)
 
                 print()
-                logging.info(f'epoch: {epoch} iter: {i_batch} |det loss: {det_loss}')
+                logging.info(
+                    f'epoch: {epoch} iter: {i_batch} |det loss: {det_loss},tv loss:{tv_loss},frequency loss:{frequency_loss}')
                 # logging.info(f'iou_loss: {iou_loss}')
                 # logging.info(f'conf_loss_union_image: {conf_loss_union_image}')
                 # logging.info(f"union_attack_loss: {union_attack_loss}")
@@ -186,10 +200,18 @@ class PatchTrainer(object):
                         # w_union_attack = N * rs[3] / sum_rs
 
                 # loss = w_det * det_loss + w_tv * tv_loss
-                print(tv_loss)
-                loss = det_loss + tv_loss * 2.5 + frequency_loss * 0.0005
+                # print('tv_loss*2.5', tv_loss * 2.5)
+                # print('frequency_loss * 0.0005', frequency_loss * 0.0005)
+                # loss = det_loss + tv_loss * 1.5 + ms_ssim_loss * 4
+                loss1 = det_loss + tv_loss * 2.5
+                loss2 = frequency_loss * 0.0005
+                # loss2 = 0
+                loss = loss2 + loss1
+                # loss = loss1
+                # loss = det_loss + tv_loss * 2.5
 
-                print("f:", frequency_loss)
+                # print("f:",det_loss,tv_loss * 2.5, frequency_loss* 0.0005)
+
                 # loss = torch.max(det_loss, torch.tensor(0.1).cuda())
                 # loss = w_iou * iou_loss + w_conf_union * conf_loss_union_image + w_tv * tv_loss + w_union_attack * union_attack_loss
                 # loss = iou_loss
@@ -210,14 +232,18 @@ class PatchTrainer(object):
                 # ep_conf_union_loss += conf_loss_union_image.detach().cpu().numpy()
                 # ep_union_loss += union_attack_loss.detach().cpu().numpy()
                 ep_tv_loss += tv_loss.detach().cpu().numpy()
-                ep_loss += loss.detach().cpu().numpy()
+                ep_loss += loss1.detach().cpu().numpy()
 
                 loss.backward()
                 # adv_patch_cpu.grad = adv_patch_cpu.grad.clip(-1, 1)
                 # print(adv_patch_cpu.grad)
-                optimizer.step()
-                optimizer.zero_grad()
+                optimizer1.step()
+                optimizer1.zero_grad()
+                optimizer2.step()
+                optimizer2.zero_grad()
+
                 adv_patch_cpu.data.clamp_(0, 1)  # keep patch in image range
+                adv_mask_cpu.data.clamp_(0, 1)
                 if i_batch % 23 == 0:
                     iteration = epoch_length * epoch + i_batch
                     # self.writer.add_scalar('total_loss', loss.detach().cpu().numpy(), iteration)
@@ -226,11 +252,16 @@ class PatchTrainer(object):
                     # self.writer.add_scalar('loss/conf_loss_union_image', conf_loss_union_image.detach().cpu().numpy(),
                     #                        iteration)
                     # self.writer.add_scalar('loss/union_loss', union_attack_loss.detach().cpu().numpy(), iteration)
-                    self.writer.add_scalar('loss/det_loss', det_loss.detach().cpu().numpy(), iteration)
+                    self.writer.add_scalar('det_loss', det_loss.detach().cpu().numpy(), iteration)
+                    self.writer.add_scalar('TV_loss', tv_loss.detach().cpu().numpy(), iteration)
+                    self.writer.add_scalar('Frequency_loss', frequency_loss.detach().cpu().numpy(), iteration)
                     # self.writer.add_image('patch', adv_patch.cpu(), iteration)
-                    self.writer.add_image('patch', adv_patch.cpu(), iteration)
+                    # self.writer.add_image('patch', adv_patch.cpu(), iteration)
+                    plt.imshow(np.asarray(functional.to_pil_image(adv_patch_cpu)))
+                    plt.show()
 
-                del adv_batch_t, p_img_batch, det_loss, tv_loss, loss
+                del adv_batch_t, p_img_batch, det_loss, frequency_loss, tv_loss, loss1
+                # del adv_batch_t, p_img_batch, det_loss, frequency_loss, tv_loss, loss1, loss2
                 # torch.cuda.empty_cache()
 
             # visual attack effection
@@ -269,7 +300,9 @@ class PatchTrainer(object):
                         adv_cmyk.save(name2)
                 if float(ASR) > max_asr:
                     name = os.path.join(self.log_path, str(float(ASR) * 100)[:4] + '_asr')
+                    name2 = os.path.join(self.log_path, str(float(ASR) * 100)[:4] + '_mask')
                     torchvision.utils.save_image(adv, name + '.png')
+                    torchvision.utils.save_image(adv_mask_cpu, name2 + '.png')
                     torch2raw(adv, name + '.raw')
                     max_asr = float(ASR)
 
@@ -280,18 +313,19 @@ class PatchTrainer(object):
             ep_det_loss = ep_det_loss / len(train_data)
             ep_loss = ep_loss / len(train_data)
             scheduler.step()
+            scheduler2.step()
 
             if True:
                 logging.info(f'epoch: {epoch}| EPOCH NR: {epoch}'),
                 logging.info(f'epoch: {epoch}| EPOCH LOSS: {ep_loss}')
                 logging.info(f"epoch: {epoch}| AP: {ap}")
-                logging.info(f"epoch: {epoch}| LR: {optimizer.param_groups[0]['lr']}")
+                logging.info(f"epoch: {epoch}| LR: {optimizer1.param_groups[0]['lr']}")
                 self.writer.add_scalar('ep_iou_all', ep_iou_all, epoch)
                 self.writer.add_scalar('ep_conf_union_loss', ep_conf_union_loss, epoch)
                 self.writer.add_scalar('ep_union_loss', ep_union_loss, epoch)
                 self.writer.add_scalar('ep_loss', ep_loss, epoch)
                 self.writer.add_scalar('AP', ap, epoch)
-                self.writer.add_scalar('LR', optimizer.param_groups[0]['lr'], epoch)
+                self.writer.add_scalar('LR', optimizer1.param_groups[0]['lr'], epoch)
 
             # logging.info(f'epoch: {epoch} | ep_iou_all: {ep_iou_all}')
             logging.info(f'epoch: {epoch} | ep_tv_loss: {ep_tv_loss}')
@@ -303,6 +337,7 @@ class PatchTrainer(object):
             # torch.cuda.empty_cache()
 
     def generate_patch(self, load_from_file=None, is_random=False, is_cmyk=0):
+        print('load_from_file', load_from_file)
         # load a image from local patch
         if load_from_file is not None:
             if 'raw' in load_from_file:
@@ -312,7 +347,7 @@ class PatchTrainer(object):
                 patch = patch.resize((self.config.patch_size, self.config.patch_size))
                 patch = transforms.PILToTensor()(patch) / 255.
             return patch
-        if is_random:
+        elif is_random:
             if is_cmyk:
                 return torch.rand((4, self.config.patch_size, self.config.patch_size))
             else:

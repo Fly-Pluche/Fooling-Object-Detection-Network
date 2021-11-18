@@ -91,7 +91,7 @@ things_color = [
 
 
 class Visualizer_(Visualizer):
-    def __init__(self, img, model, threshold=0.5, mode='tensor'):
+    def __init__(self, img, model, threshold=0.5, only_classes=14,mode='tensor'):
         """
         Args:
             img: one image (support tensor and rgb np array)
@@ -104,6 +104,7 @@ class Visualizer_(Visualizer):
             img_rgb = img
         super(Visualizer_, self).__init__(img_rgb, MetadataCatalog.get(model.cfg.DATASETS.TRAIN[0]))
         self.threshold = threshold
+        self.only_classes=only_classes
 
     def tensor2rgb(self, img):
         """
@@ -136,9 +137,17 @@ class Visualizer_(Visualizer):
         boxes = boxes[scores >= self.threshold]
         classes = classes[scores >= self.threshold]
         scores = scores[scores >= self.threshold]
-        boxes = boxes[classes < 21]
-        scores = scores[classes < 21]
-        classes = classes[classes < 21]
+        if self.only_classes:
+            boxes = boxes[classes==self.only_classes]
+            scores = scores[classes==self.only_classes]
+            classes = classes[classes==self.only_classes]
+        else:
+            boxes = boxes[classes < 21]
+            scores = scores[classes < 21]
+            classes = classes[classes < 21]
+        # boxes = boxes[classes=self.useless_classes]
+        # scores = scores[classes=self.useless_classes]
+        # classes = classes[classes=self.useless_classes]
         classes = classes.int()
         labels = _create_text_labels(classes, scores, self.metadata.get("thing_classes", None))
         alpha = 0.5

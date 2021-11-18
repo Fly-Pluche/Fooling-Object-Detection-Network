@@ -9,12 +9,11 @@
       <sourceFolder url="file://$MODULE_DIR$/net" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/net/yolov3" isTestSource="false" />
     </content>
-    <orderEntry type="jdk" jdkName="ray-A100" jdkType="Python SDK" />
+    <orderEntry type="jdk" jdkName="3.7.11 (sftp://ray@10.12.1.147:22/home/ray/anaconda3/envs/coronapolvo/bin/python3.7)" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
   </component>
-  <component name="PyDocumentationSettings">
-    <option name="format" value="PLAIN" />
-    <option name="myDocStringFormat" value="Plain" />
+  <component name="PackageRequirementsSettings">
+    <option name="requirementsPath" value="" />
   </component>
   <component name="TestRunnerService">
     <option name="PROJECT_TEST_RUNNER" value="pytest" />
