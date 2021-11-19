@@ -2,6 +2,8 @@ import torch
 import torch.fft as fft
 
 
+
+
 def produce_cycle_mask(img_h, img_w, cycle_size=8):
     """
     produce a cycle mask

@@ -6,10 +6,9 @@ import os
 import setproctitle
 
 setproctitle.setproctitle("train_adversarial_patch_coronaPolvo")
-os.environ["CUDA_VISIBLE_DEVICES"] = "3"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 # os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 # os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-
 
 
 
@@ -25,3 +24,4 @@ if __name__ == '__main__':
 
     is_random=False
     trainer.train(load_patch_from_file,load_mask_from_file,is_random)
+

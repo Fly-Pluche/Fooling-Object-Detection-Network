@@ -11,6 +11,7 @@ from patch import *
 from patch_config import *
 from utils.transforms import CMYK2RGB
 from utils.utils import *
+from utils.frequency_tools import *
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0,1"
 warnings.filterwarnings('ignore')
@@ -30,7 +31,7 @@ class PatchTrainer(object):
         self.model_ = Yolov3(self.config.model_path, self.config.model_image_size, self.config.classes_path)
         self.model_.set_image_size(self.config.img_size[0])
         # self.name = '四角 无frequency loss'
-        self.name = '八角 mask_FFT_显式训练 50step'
+        self.name = '八角 mask_FFT_隐式训练-50step-sigmoid[corona]'
         self.log_path = self.config.log_path
         self.writer = self.init_tensorboard(name='base')
         self.init_logger()
@@ -98,43 +99,24 @@ class PatchTrainer(object):
         epoch_length = len(train_data)
 
         # generate a rgb patch
-        # adv_patch_cpu = self.generate_patch(
+        adv_patch_cpu = self.generate_patch(load_patch_from_file, is_random=True, is_cmyk=self.is_cmyk)
         adv_patch_cpu.requires_grad_(True)
 
-        adv_mask_cpu = self.generate_patch(load_mask_from_file, is_random=True, is_cmyk=self.is_cmyk)
+        adv_mask_cpu = torch.full((3, self.config.patch_size, self.config.patch_size), 1.0)
         adv_mask_cpu.requires_grad_(True)
 
         if self.config.optim == 'adam':
-            optimizer1 = torch.optim.Adam([adv_patch_cpu], lr=self.config.start_learning_rate)
+            optimizer1 = torch.optim.Adam([{"params": adv_patch_cpu, 'lr': self.config.start_learning_rate},
+                                           {"params": adv_mask_cpu, 'lr': 0.01}])
             scheduler = torch.optim.lr_scheduler.StepLR(optimizer1, self.config.step_size,
                                                         self.config.gamma)  # used to update learning rate
-
-            optimizer2 = torch.optim.Adam([adv_mask_cpu], lr=self.config.start_learning_rate)
-            scheduler2 = torch.optim.lr_scheduler.StepLR(optimizer2, self.config.step_size,
-                                                         self.config.gamma)  # used to update learning rate
         elif self.config.optim == 'sgd':
             optimizer1 = optim.SGD([adv_patch_cpu], momentum=0.9, lr=self.config.start_learning_rate)
             scheduler = optim.lr_scheduler.MultiStepLR(optimizer1, milestones=[10, 25, 60, 100, 190], gamma=0.5,
                                                        last_epoch=-1)
 
-            optimizer2 = optim.SGD([adv_mask_cpu], momentum=0.9, lr=self.config.start_learning_rate)
-            scheduler2 = optim.lr_scheduler.MultiStepLR(optimizer2, milestones=[10, 25, 60, 100, 190], gamma=0.5,
-                                                        last_epoch=-1)
-
         else:
             raise ValueError("Optimizer can only be adam or sgd!")
-        # Parameters to initialize some dynamically updated weights
-        N = 2
-        w_iou = 1
-        w_conf_union = 1
-        w_tv = 1
-        w_det = 1
-        w_union_attack = 1
-        last_iou_loss = -1
-        last_conf_union_loss = -1
-        last_tv_loss = -1
-        last_det_loss = -1
-        last_union_attack_loss = -1
 
         # start training
         min_ap = 1
@@ -156,7 +138,8 @@ class PatchTrainer(object):
                 adv_patch = adv_patch_cpu.cuda()
                 adv_mask = adv_mask_cpu.cuda()
                 # 隐式训练
-                # adv_patch = mask_fft(adv_patch, adv_mask).squeeze(0)
+                adv_patch = mask_fft(adv_patch, adv_mask).squeeze(0)
+                # print(adv_mask)
                 if self.is_cmyk:
                     adv_patch = CMYK2RGB(adv_patch)
                 # Attach the attack image to the clothing
@@ -167,8 +150,9 @@ class PatchTrainer(object):
                 # calculate each part of the loss
 
                 det_loss = torch.mean(self.max_extractor(self.model_, p_img_batch))
+                print(det_loss)
                 tv_loss = self.total_variation(adv_patch)
-                frequency_loss = self.frequency_loss(adv_patch, adv_mask)
+                # frequency_loss = self.frequency_loss(adv_patch, adv_mask)
                 # frequency_loss = 0
                 # ms_ssim_loss=1-self.ms_ssim_loss(((adv_patch + 1) * 127).cpu().detach())
 
@@ -176,93 +160,35 @@ class PatchTrainer(object):
                 # union_attack_loss = self.entropy(predicted_id, attack_id)
 
                 print()
+                frequency_loss = 0
                 logging.info(
                     f'epoch: {epoch} iter: {i_batch} |det loss: {det_loss},tv loss:{tv_loss},frequency loss:{frequency_loss}')
-                # logging.info(f'iou_loss: {iou_loss}')
-                # logging.info(f'conf_loss_union_image: {conf_loss_union_image}')
-                # logging.info(f"union_attack_loss: {union_attack_loss}")
 
-                # Dynamic update weight parameter
-                with torch.no_grad():
-                    if last_iou_loss != -1:
-                        # r_conf_single = iou_loss / last_iou_loss
-                        # r_conf_union = conf_loss_union_image / last_conf_union_loss
-                        r_tv = tv_loss / last_tv_loss
-                        # r_union = union_attack_loss / last_union_attack_loss
-                        r_det_loss = det_loss / last_det_loss
-                        rs = torch.stack([r_det_loss, r_tv])
-                        rs = torch.exp(rs)
-                        sum_rs = torch.sum(rs)
-                        # w_iou = (N * rs[0]) / sum_rs
-                        # w_conf_union = N * rs[1] / sum_rs
-                        w_det = N * rs[0] / sum_rs
-                        w_tv = N * rs[1] / sum_rs
-                        # w_union_attack = N * rs[3] / sum_rs
-
-                # loss = w_det * det_loss + w_tv * tv_loss
-                # print('tv_loss*2.5', tv_loss * 2.5)
-                # print('frequency_loss * 0.0005', frequency_loss * 0.0005)
-                # loss = det_loss + tv_loss * 1.5 + ms_ssim_loss * 4
                 loss1 = det_loss + tv_loss * 2.5
-                loss2 = frequency_loss * 0.0005
-                # loss2 = 0
-                loss = loss2 + loss1
-                # loss = loss1
-                # loss = det_loss + tv_loss * 2.5
-
-                # print("f:",det_loss,tv_loss * 2.5, frequency_loss* 0.0005)
-
-                # loss = torch.max(det_loss, torch.tensor(0.1).cuda())
-                # loss = w_iou * iou_loss + w_conf_union * conf_loss_union_image + w_tv * tv_loss + w_union_attack * union_attack_loss
-                # loss = iou_loss
-                # loss = conf_loss_union_image
-                # loss = conf_loss_union_image
-                # loss = union_attack_loss
-
-                # update last loss
-                # last_iou_loss = iou_loss.detach()
-                # last_conf_union_loss = conf_loss_union_image.detach()
-                last_det_loss = det_loss.detach()
-                last_tv_loss = tv_loss.detach()
-                # last_union_attack_loss = union_attack_loss.detach()
+                loss = loss1
 
                 # evaluate
                 ep_det_loss += det_loss.detach().cpu().numpy()
-                # ep_iou_all += iou_loss.detach().cpu().numpy()
-                # ep_conf_union_loss += conf_loss_union_image.detach().cpu().numpy()
-                # ep_union_loss += union_attack_loss.detach().cpu().numpy()
                 ep_tv_loss += tv_loss.detach().cpu().numpy()
-                ep_loss += loss1.detach().cpu().numpy()
+                ep_loss += loss.detach().cpu().numpy()
 
                 loss.backward()
-                # adv_patch_cpu.grad = adv_patch_cpu.grad.clip(-1, 1)
-                # print(adv_patch_cpu.grad)
+
                 optimizer1.step()
                 optimizer1.zero_grad()
-                optimizer2.step()
-                optimizer2.zero_grad()
 
                 adv_patch_cpu.data.clamp_(0, 1)  # keep patch in image range
-                adv_mask_cpu.data.clamp_(0, 1)
+                # adv_mask_cpu.data = torch.sigmoid(adv_mask_cpu.data)
+
                 if i_batch % 23 == 0:
                     iteration = epoch_length * epoch + i_batch
-                    # self.writer.add_scalar('total_loss', loss.detach().cpu().numpy(), iteration)
-                    # self.writer.add_scalar('loss/iou_loss', iou_loss.detach().cpu().numpy(),
-                    #                        iteration)
-                    # self.writer.add_scalar('loss/conf_loss_union_image', conf_loss_union_image.detach().cpu().numpy(),
-                    #                        iteration)
-                    # self.writer.add_scalar('loss/union_loss', union_attack_loss.detach().cpu().numpy(), iteration)
                     self.writer.add_scalar('det_loss', det_loss.detach().cpu().numpy(), iteration)
                     self.writer.add_scalar('TV_loss', tv_loss.detach().cpu().numpy(), iteration)
-                    self.writer.add_scalar('Frequency_loss', frequency_loss.detach().cpu().numpy(), iteration)
-                    # self.writer.add_image('patch', adv_patch.cpu(), iteration)
-                    # self.writer.add_image('patch', adv_patch.cpu(), iteration)
-                    plt.imshow(np.asarray(functional.to_pil_image(adv_patch_cpu)))
-                    plt.show()
+                    # self.writer.add_scalar('Frequency_loss', frequency_loss.detach().cpu().numpy(), iteration)
+                    # plt.imshow(np.asarray(functional.to_pil_image(adv_patch_cpu)))
+                    # plt.show()
 
-                del adv_batch_t, p_img_batch, det_loss, frequency_loss, tv_loss, loss1
-                # del adv_batch_t, p_img_batch, det_loss, frequency_loss, tv_loss, loss1, loss2
-                # torch.cuda.empty_cache()
+                del adv_batch_t, p_img_batch, det_loss, tv_loss, loss1, loss
 
             # visual attack effection
             if epoch % 10 == 0:
@@ -313,7 +239,6 @@ class PatchTrainer(object):
             ep_det_loss = ep_det_loss / len(train_data)
             ep_loss = ep_loss / len(train_data)
             scheduler.step()
-            scheduler2.step()
 
             if True:
                 logging.info(f'epoch: {epoch}| EPOCH NR: {epoch}'),

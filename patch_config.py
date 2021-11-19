@@ -26,8 +26,8 @@ class BaseConfig(object):
         self.weight_file = "/home/corona/attack/PyTorch-YOLOv3/good_weights/yolov3_ckpt_98.pth"
         self.txt_path = '/home/corona/datasets/WiderPerson/train/train2.txt'
         self.save_adv_patch_path = config['DEFAULT']['SAVE_ADV_PATCH_PATH']
-        self.step_size=float(config['DEFAULT']['STEP_SIZE'])
-        self.gamma=float(config['DEFAULT']['GAMMA'])
+        self.step_size = float(config['DEFAULT']['STEP_SIZE'])
+        self.gamma = float(config['DEFAULT']['GAMMA'])
         self.deepfooling_txt = config['DEFAULT']['DEEPFOOLING_TXT']
         self.patch_size = int(config['DEFAULT']['PATH_SIZE'])
         self.root_path = config['DEFAULT']['ROOT_PATH']
