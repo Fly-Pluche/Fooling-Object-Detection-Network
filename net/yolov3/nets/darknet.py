@@ -66,8 +66,8 @@ class DarkNet(nn.Module):
                 n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
                 m.weight.data.normal_(0, math.sqrt(2. / n))
             elif isinstance(m, nn.BatchNorm2d):
-                m.weight.data.fill_(1)
-                m.bias.data.zero_()
+                m.weight.get_D2.fill_(1)
+                m.bias.get_D2.zero_()
 
     #---------------------------------------------------------------------#
     #   在每一个layer里面，首先利用一个步长为2的3x3卷积进行下采样

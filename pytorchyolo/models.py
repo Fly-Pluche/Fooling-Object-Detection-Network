@@ -224,35 +224,35 @@ class Darknet(nn.Module):
                     # Bias
                     bn_b = torch.from_numpy(
                         weights[ptr: ptr + num_b]).view_as(bn_layer.bias)
-                    bn_layer.bias.data.copy_(bn_b)
+                    bn_layer.bias.get_D2.copy_(bn_b)
                     ptr += num_b
                     # Weight
                     bn_w = torch.from_numpy(
                         weights[ptr: ptr + num_b]).view_as(bn_layer.weight)
-                    bn_layer.weight.data.copy_(bn_w)
+                    bn_layer.weight.get_D2.copy_(bn_w)
                     ptr += num_b
                     # Running Mean
                     bn_rm = torch.from_numpy(
                         weights[ptr: ptr + num_b]).view_as(bn_layer.running_mean)
-                    bn_layer.running_mean.data.copy_(bn_rm)
+                    bn_layer.running_mean.get_D2.copy_(bn_rm)
                     ptr += num_b
                     # Running Var
                     bn_rv = torch.from_numpy(
                         weights[ptr: ptr + num_b]).view_as(bn_layer.running_var)
-                    bn_layer.running_var.data.copy_(bn_rv)
+                    bn_layer.running_var.get_D2.copy_(bn_rv)
                     ptr += num_b
                 else:
                     # Load conv. bias
                     num_b = conv_layer.bias.numel()
                     conv_b = torch.from_numpy(
                         weights[ptr: ptr + num_b]).view_as(conv_layer.bias)
-                    conv_layer.bias.data.copy_(conv_b)
+                    conv_layer.bias.get_D2.copy_(conv_b)
                     ptr += num_b
                 # Load conv. weights
                 num_w = conv_layer.weight.numel()
                 conv_w = torch.from_numpy(
                     weights[ptr: ptr + num_w]).view_as(conv_layer.weight)
-                conv_layer.weight.data.copy_(conv_w)
+                conv_layer.weight.get_D2.copy_(conv_w)
                 ptr += num_w
 
     def save_darknet_weights(self, path, cutoff=-1):
@@ -271,15 +271,15 @@ class Darknet(nn.Module):
                 # If batch norm, load bn first
                 if module_def["batch_normalize"]:
                     bn_layer = module[1]
-                    bn_layer.bias.data.cpu().numpy().tofile(fp)
-                    bn_layer.weight.data.cpu().numpy().tofile(fp)
-                    bn_layer.running_mean.data.cpu().numpy().tofile(fp)
-                    bn_layer.running_var.data.cpu().numpy().tofile(fp)
+                    bn_layer.bias.get_D2.cpu().numpy().tofile(fp)
+                    bn_layer.weight.get_D2.cpu().numpy().tofile(fp)
+                    bn_layer.running_mean.get_D2.cpu().numpy().tofile(fp)
+                    bn_layer.running_var.get_D2.cpu().numpy().tofile(fp)
                 # Load conv bias
                 else:
-                    conv_layer.bias.data.cpu().numpy().tofile(fp)
+                    conv_layer.bias.get_D2.cpu().numpy().tofile(fp)
                 # Load conv weights
-                conv_layer.weight.data.cpu().numpy().tofile(fp)
+                conv_layer.weight.get_D2.cpu().numpy().tofile(fp)
 
         fp.close()
 

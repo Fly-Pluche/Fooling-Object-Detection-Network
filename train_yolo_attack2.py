@@ -31,7 +31,7 @@ class PatchTrainer(object):
         self.model_ = Yolov3(self.config.model_path, self.config.model_image_size, self.config.classes_path)
         self.model_.set_image_size(self.config.img_size[0])
         # self.name = '四角 无frequency loss'
-        self.name = '八角 mask_FFT_隐式训练-50step-sigmoid[corona]'
+        self.name = '八角 mask_FFT_隐式训练-18step-lr=0.005 ycbcr[finial]'
         self.log_path = self.config.log_path
         self.writer = self.init_tensorboard(name='base')
         self.init_logger()
@@ -105,9 +105,12 @@ class PatchTrainer(object):
         adv_mask_cpu = torch.full((3, self.config.patch_size, self.config.patch_size), 1.0)
         adv_mask_cpu.requires_grad_(True)
 
+        adv_patch = None
+        adv_mask = None
+
         if self.config.optim == 'adam':
             optimizer1 = torch.optim.Adam([{"params": adv_patch_cpu, 'lr': self.config.start_learning_rate},
-                                           {"params": adv_mask_cpu, 'lr': 0.01}])
+                                           {"params": adv_mask_cpu, 'lr': 0.005}])
             scheduler = torch.optim.lr_scheduler.StepLR(optimizer1, self.config.step_size,
                                                         self.config.gamma)  # used to update learning rate
         elif self.config.optim == 'sgd':
@@ -137,9 +140,10 @@ class PatchTrainer(object):
                 people_boxes = people_boxes.cuda()
                 adv_patch = adv_patch_cpu.cuda()
                 adv_mask = adv_mask_cpu.cuda()
-                # 隐式训练
-                adv_patch = mask_fft(adv_patch, adv_mask).squeeze(0)
-                # print(adv_mask)
+                # 隐式训练 rgb
+                # adv_patch = mask_fft(adv_patch, adv_mask).squeeze(0)
+                # 隐式训练 ycbcr
+                adv_patch = mask_fft2(adv_patch, adv_mask).squeeze(0)
                 if self.is_cmyk:
                     adv_patch = CMYK2RGB(adv_patch)
                 # Attach the attack image to the clothing
@@ -148,23 +152,15 @@ class PatchTrainer(object):
                 p_img_batch = F.interpolate(p_img_batch, (self.config.img_size[1], self.config.img_size[0]),
                                             mode='bilinear')
                 # calculate each part of the loss
-
                 det_loss = torch.mean(self.max_extractor(self.model_, p_img_batch))
-                print(det_loss)
                 tv_loss = self.total_variation(adv_patch)
-                # frequency_loss = self.frequency_loss(adv_patch, adv_mask)
-                # frequency_loss = 0
-                # ms_ssim_loss=1-self.ms_ssim_loss(((adv_patch + 1) * 127).cpu().detach())
-
-                # predicted_id, attack_id = self.union_detector(self.model_, image_batch, p_img_batch, people_boxes_batch)
-                # union_attack_loss = self.entropy(predicted_id, attack_id)
 
                 print()
                 frequency_loss = 0
                 logging.info(
                     f'epoch: {epoch} iter: {i_batch} |det loss: {det_loss},tv loss:{tv_loss},frequency loss:{frequency_loss}')
 
-                loss1 = det_loss + tv_loss * 2.5
+                loss1 = det_loss + 2.5 * tv_loss
                 loss = loss1
 
                 # evaluate
@@ -173,7 +169,7 @@ class PatchTrainer(object):
                 ep_loss += loss.detach().cpu().numpy()
 
                 loss.backward()
-
+                print(loss)
                 optimizer1.step()
                 optimizer1.zero_grad()
 
@@ -187,12 +183,16 @@ class PatchTrainer(object):
                     # self.writer.add_scalar('Frequency_loss', frequency_loss.detach().cpu().numpy(), iteration)
                     # plt.imshow(np.asarray(functional.to_pil_image(adv_patch_cpu)))
                     # plt.show()
+                if i_batch % 399 == 0:
+                    iteration = epoch_length * epoch + i_batch
+                    self.writer.add_image('adv-patch', adv_patch.clone().cpu(), iteration)
+                    self.writer.add_image('frequency-attention', adv_mask.clone().cpu(), iteration)
 
                 del adv_batch_t, p_img_batch, det_loss, tv_loss, loss1, loss
 
             # visual attack effection
             if epoch % 10 == 0:
-                self.patch_evaluator.save_visual_images(adv_patch_cpu.clone(), self.image_save_path, epoch)
+                self.patch_evaluator.save_visual_images(adv_patch.clone(), self.image_save_path, epoch)
 
             # eval patch
             with torch.no_grad():
@@ -201,7 +201,8 @@ class PatchTrainer(object):
                     adv = adv_cmyk.cuda()
                     adv = CMYK2RGB(adv)
                 else:
-                    adv = adv_patch_cpu.clone()
+                    adv = adv_patch.clone()
+                    frequency_attention_mask = adv_mask.clone()
 
                 # calculate ap50
                 ap = self.patch_evaluator(adv, 0.5)
@@ -214,11 +215,12 @@ class PatchTrainer(object):
                 self.writer.add_scalar('ASRs', ASRs, epoch)
                 self.writer.add_scalar('ASRm', ASRm, epoch)
                 self.writer.add_scalar('ASRl', ASRl, epoch)
+
                 # save better patch image
                 if float(ap) < min_ap:
                     name = os.path.join(self.log_path, str(float(ap) * 100))
                     torchvision.utils.save_image(adv, name + '.png')
-                    torch2raw(adv, name + '.raw')
+                    torch2raw(adv.cpu(), name + '.raw')
                     min_ap = float(ap)
                     if self.is_cmyk:
                         name2 = os.path.join(self.log_path, str(float(ap) * 100) + '.TIF')
@@ -228,8 +230,8 @@ class PatchTrainer(object):
                     name = os.path.join(self.log_path, str(float(ASR) * 100)[:4] + '_asr')
                     name2 = os.path.join(self.log_path, str(float(ASR) * 100)[:4] + '_mask')
                     torchvision.utils.save_image(adv, name + '.png')
-                    torchvision.utils.save_image(adv_mask_cpu, name2 + '.png')
-                    torch2raw(adv, name + '.raw')
+                    torchvision.utils.save_image(frequency_attention_mask, name2 + '.png')
+                    torch2raw(adv.cpu(), name + '.raw')
                     max_asr = float(ASR)
 
             # ep_iou_all = ep_iou_all / len(train_data)

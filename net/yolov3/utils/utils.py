@@ -93,8 +93,8 @@ class DecodeBox(nn.Module):
         pred_boxes = FloatTensor(prediction[..., :4].shape)
         pred_boxes[..., 0] = x.data + grid_x
         pred_boxes[..., 1] = y.data + grid_y
-        pred_boxes[..., 2] = torch.exp(w.data) * anchor_w
-        pred_boxes[..., 3] = torch.exp(h.data) * anchor_h
+        pred_boxes[..., 2] = torch.exp(w.get_D2) * anchor_w
+        pred_boxes[..., 3] = torch.exp(h.get_D2) * anchor_h
 
         # ----------------------------------------------------------#
         #   将输出结果调整成相对于输入图像大小

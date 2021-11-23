@@ -256,14 +256,14 @@ class Darknet(nn.Module):
                     ptr += num_bn_biases
 
                     # Cast the loaded weights into dims of model weights.
-                    bn_biases = bn_biases.view_as(bn.bias.data)
-                    bn_weights = bn_weights.view_as(bn.weight.data)
+                    bn_biases = bn_biases.view_as(bn.bias.get_D2)
+                    bn_weights = bn_weights.view_as(bn.weight.get_D2)
                     bn_running_mean = bn_running_mean.view_as(bn.running_mean)
                     bn_running_var = bn_running_var.view_as(bn.running_var)
 
                     # Copy the data to model
-                    bn.bias.data.copy_(bn_biases)
-                    bn.weight.data.copy_(bn_weights)
+                    bn.bias.get_D2.copy_(bn_biases)
+                    bn.weight.get_D2.copy_(bn_weights)
                     bn.running_mean.copy_(bn_running_mean)
                     bn.running_var.copy_(bn_running_var)
 
@@ -276,10 +276,10 @@ class Darknet(nn.Module):
                     ptr = ptr + num_biases
 
                     # reshape the loaded weights according to the dims of the model weights
-                    conv_biases = conv_biases.view_as(conv.bias.data)
+                    conv_biases = conv_biases.view_as(conv.bias.get_D2)
 
                     # Finally copy the data
-                    conv.bias.data.copy_(conv_biases)
+                    conv.bias.get_D2.copy_(conv_biases)
 
                 # 为卷积层加载权重
                 num_weights = conv.weight.numel()
@@ -288,8 +288,8 @@ class Darknet(nn.Module):
                 conv_weights = torch.from_numpy(weights[ptr:ptr + num_weights])
                 ptr = ptr + num_weights
 
-                conv_weights = conv_weights.view_as(conv.weight.data)
-                conv.weight.data.copy_(conv_weights)
+                conv_weights = conv_weights.view_as(conv.weight.get_D2)
+                conv.weight.get_D2.copy_(conv_weights)
 
 
 if __name__ == '__main__':
