@@ -53,10 +53,10 @@ def load_classes(path):
 def weights_init_normal(m):
     classname = m.__class__.__name__
     if classname.find("Conv") != -1:
-        nn.init.normal_(m.weight.get_D2, 0.0, 0.02)
+        nn.init.normal_(m.weight.data, 0.0, 0.02)
     elif classname.find("BatchNorm2d") != -1:
-        nn.init.normal_(m.weight.get_D2, 1.0, 0.02)
-        nn.init.constant_(m.bias.get_D2, 0.0)
+        nn.init.normal_(m.weight.data, 1.0, 0.02)
+        nn.init.constant_(m.bias.data, 0.0)
 
 
 def rescale_boxes(boxes, current_dim, original_shape):

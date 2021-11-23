@@ -5,11 +5,11 @@ import torch
 import torch.nn as nn
 
 
-#---------------------------------------------------------------------#
+# ---------------------------------------------------------------------#
 #   残差结构
 #   利用一个1x1卷积下降通道数，然后利用一个3x3卷积提取特征并且上升通道数
 #   最后接上一个残差边
-#---------------------------------------------------------------------#
+# ---------------------------------------------------------------------#
 class BasicBlock(nn.Module):
     def __init__(self, inplanes, planes):
         super(BasicBlock, self).__init__()
@@ -17,7 +17,7 @@ class BasicBlock(nn.Module):
                                stride=1, padding=0, bias=False)
         self.bn1 = nn.BatchNorm2d(planes[0])
         self.relu1 = nn.LeakyReLU(0.1)
-        
+
         self.conv2 = nn.Conv2d(planes[0], planes[1], kernel_size=3,
                                stride=1, padding=1, bias=False)
         self.bn2 = nn.BatchNorm2d(planes[1])
@@ -66,18 +66,18 @@ class DarkNet(nn.Module):
                 n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
                 m.weight.data.normal_(0, math.sqrt(2. / n))
             elif isinstance(m, nn.BatchNorm2d):
-                m.weight.get_D2.fill_(1)
-                m.bias.get_D2.zero_()
+                m.weight.fill_(1)
+                m.bias.zero_()
 
-    #---------------------------------------------------------------------#
+    # ---------------------------------------------------------------------#
     #   在每一个layer里面，首先利用一个步长为2的3x3卷积进行下采样
     #   然后进行残差结构的堆叠
-    #---------------------------------------------------------------------#
+    # ---------------------------------------------------------------------#
     def _make_layer(self, planes, blocks):
         layers = []
         # 下采样，步长为2，卷积核大小为3
         layers.append(("ds_conv", nn.Conv2d(self.inplanes, planes[1], kernel_size=3,
-                                stride=2, padding=1, bias=False)))
+                                            stride=2, padding=1, bias=False)))
         layers.append(("ds_bn", nn.BatchNorm2d(planes[1])))
         layers.append(("ds_relu", nn.LeakyReLU(0.1)))
         # 加入残差结构
@@ -98,6 +98,7 @@ class DarkNet(nn.Module):
         out5 = self.layer5(out4)
 
         return out3, out4, out5
+
 
 def darknet53(pretrained, **kwargs):
     model = DarkNet([1, 2, 8, 8, 4])
