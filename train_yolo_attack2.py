@@ -9,9 +9,9 @@ from evaluator import *
 from evaluator import PatchEvaluator
 from patch import *
 from patch_config import *
+from utils.frequency_tools import *
 from utils.transforms import CMYK2RGB
 from utils.utils import *
-from utils.frequency_tools import *
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0,1"
 warnings.filterwarnings('ignore')
@@ -31,7 +31,7 @@ class PatchTrainer(object):
         self.model_ = Yolov3(self.config.model_path, self.config.model_image_size, self.config.classes_path)
         self.model_.set_image_size(self.config.img_size[0])
         # self.name = '四角 无frequency loss'
-        self.name = '八角 mask_FFT_隐式训练-18step-lr=0.005 ycbcr[finial]'
+        self.name = '八角 mask_FFT_隐式训练-18step-lr=0.005 ycbcr[finial-save]'
         self.log_path = self.config.log_path
         self.writer = self.init_tensorboard(name='base')
         self.init_logger()
@@ -220,7 +220,7 @@ class PatchTrainer(object):
                 if float(ap) < min_ap:
                     name = os.path.join(self.log_path, str(float(ap) * 100))
                     torchvision.utils.save_image(adv, name + '.png')
-                    torch2raw(adv.cpu(), name + '.raw')
+                    # torch2raw(adv.cpu(), name + '.raw')
                     min_ap = float(ap)
                     if self.is_cmyk:
                         name2 = os.path.join(self.log_path, str(float(ap) * 100) + '.TIF')
@@ -228,15 +228,14 @@ class PatchTrainer(object):
                         adv_cmyk.save(name2)
                 if float(ASR) > max_asr:
                     name = os.path.join(self.log_path, str(float(ASR) * 100)[:4] + '_asr')
-                    name2 = os.path.join(self.log_path, str(float(ASR) * 100)[:4] + '_mask')
+                    name2 = os.path.join(self.log_path, str(float(ASR) * 100)[:4] + '_asr_mask')
                     torchvision.utils.save_image(adv, name + '.png')
                     torchvision.utils.save_image(frequency_attention_mask, name2 + '.png')
-                    torch2raw(adv.cpu(), name + '.raw')
+                    # torch2raw(adv.cpu(), name + '.raw')
+                    torch.save(adv_mask, name2 + '.pt')
+                    torch.save(adv, name + '.pt')
                     max_asr = float(ASR)
 
-            # ep_iou_all = ep_iou_all / len(train_data)
-            # ep_conf_union_loss = ep_conf_union_loss / len(train_data)
-            # ep_union_loss = ep_union_loss / len(train_data)
             ep_tv_loss = ep_tv_loss / len(train_data)
             ep_det_loss = ep_det_loss / len(train_data)
             ep_loss = ep_loss / len(train_data)
@@ -263,11 +262,14 @@ class PatchTrainer(object):
             # del max_prob, det_loss, p_img_batch, tv_loss, loss, adv_batch_mask_t, iou_loss, union_iou_loss
             # torch.cuda.empty_cache()
 
-    def generate_patch(self, load_from_file=None, is_random=False, is_cmyk=0):
-        print('load_from_file', load_from_file)
+    def generate_patch(self, load_from_file=None, is_random=False, is_cmyk=0, is_from_pt=False):
+        # print('load_from_file', load_from_file)
+
         # load a image from local patch
         if load_from_file is not None:
-            if 'raw' in load_from_file:
+            if is_from_pt:
+                patch = torch.load(load_from_file)
+            elif 'raw' in load_from_file:
                 patch = raw2torch(load_from_file, np.array([3, self.config.patch_size, self.config.patch_size]))
             else:
                 patch = Image.open(load_from_file)
