@@ -1,4 +1,4 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
-  <component name="ProjectRootManager" version="2" project-jdk-name="3.7.11 (sftp://ray@10.12.1.147:22/home/ray/anaconda3/envs/coronapolvo/bin/python3.7)" project-jdk-type="Python SDK" />
+  <component name="ProjectRootManager" version="2" project-jdk-name="ray-A100" project-jdk-type="Python SDK" />
 </project>

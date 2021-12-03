@@ -1,5 +1,7 @@
 import torch
 import torch.fft as fft
+import torch.nn as nn
+import torch.nn.functional as F
 
 
 def produce_cycle_mask(img_h, img_w, cycle_size=8):
@@ -54,9 +56,12 @@ def rgb2ycbcr(img):
 
 def ycbcr2rgb(img):
     img_rgb = img.clone()
-    img_rgb[1, :, :] = (img[1, :, :] / 0.564) + img[0, :, :]
-    img_rgb[2, :, :] = (img[2, :, :] / 0.713) + img[0, :, :]
-    img_rgb[0, :, :] = (img[0, :, :] - 0.587 * img[1, :, :] - 0.11 * img[2, :, :]) / 0.299
+    # B
+    img_rgb[2, :, :] = (img[1, :, :] / 0.564) + img[0, :, :]
+    # R
+    img_rgb[0, :, :] = (img[2, :, :] / 0.713) + img[0, :, :]
+    # G
+    img_rgb[1, :, :] = (img[0, :, :] - 0.299 * img_rgb[0, :, :] - 0.114 * img_rgb[2, :, :]) / 0.587
     return img_rgb
 
 
@@ -91,3 +96,33 @@ def mask_fft2(img, alpha):
     img_frequency = torch.abs(fft.ifftn(f, dim=(2, 3)))
     img_frequency = ycbcr2rgb(img_frequency.squeeze(0)).unsqueeze(0)
     return img_frequency
+
+
+class FrequencyAttention(nn.Module):
+    def __init__(self):
+        super(FrequencyAttention, self).__init__()
+        self.conv1 = torch.nn.Conv2d(3, 5, 3, padding=1)
+        self.conv2 = torch.nn.Conv2d(5, 3, 1)
+        self.sigmoid1 = torch.nn.Sigmoid()
+        self.sigmoid2 = torch.nn.Sigmoid()
+        self.attention = None
+        # self.bn = torch.nn.BatchNorm2d(num_features=3)
+        # self.frequency_mask = torch.ones(3, 950, 950)
+
+    def forward(self, x, ycbcr=False):
+        if ycbcr:
+            x = rgb2ycbcr(x)
+        f = fft.fftn(x.unsqueeze(0), dim=(2, 3))
+        f = torch.roll(f, (x.size(1) // 2, x.size(2) // 2), dims=(2, 3))
+        frequency_attention = self.conv1(f.to(torch.float32))
+        frequency_attention = self.sigmoid1(frequency_attention)
+        frequency_attention = self.conv2(frequency_attention)
+        frequency_attention = self.sigmoid2(frequency_attention)
+        self.attention = frequency_attention.clone()
+        f = frequency_attention * f
+        x = torch.abs(fft.ifftn(f, dim=(2, 3)))
+        if ycbcr:
+            x = ycbcr2rgb(x.squeeze(0))
+        else:
+            x = x.squeeze(0)
+        return x

@@ -31,7 +31,7 @@ class PatchTrainer(object):
         self.model_ = Yolov3(self.config.model_path, self.config.model_image_size, self.config.classes_path)
         self.model_.set_image_size(self.config.img_size[0])
         # self.name = '四角 无frequency loss'
-        self.name = '八角 mask_FFT_隐式训练-18step-lr=0.005 ycbcr[finial-in-pre-7-epoch]'
+        self.name = '八角 origin'
         self.log_path = self.config.log_path
         self.writer = self.init_tensorboard(name='base')
         self.init_logger()
@@ -102,19 +102,13 @@ class PatchTrainer(object):
         adv_patch_cpu = self.generate_patch(load_patch_from_file, is_random=True, is_cmyk=self.is_cmyk)
         adv_patch_cpu.requires_grad_(True)
 
-        adv_mask_cpu = torch.full((3, self.config.patch_size, self.config.patch_size), 1.0)
-        adv_mask_cpu.requires_grad_(True)
-
         adv_patch = None
-        adv_mask = None
 
         if self.config.optim == 'adam':
-            optimizer1 = torch.optim.Adam([{"params": adv_patch_cpu, 'lr': self.config.start_learning_rate},
-                                           {"params": adv_mask_cpu, 'lr': 0.005}])
+            optimizer1 = torch.optim.Adam([{"params": adv_patch_cpu, 'lr': self.config.start_learning_rate}])
             scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer1, milestones=[18, 36, 56, 70],
                                                              gamma=self.config.gamma,
                                                              last_epoch=-1)  # used to update learning rate
-
         elif self.config.optim == 'sgd':
             optimizer1 = optim.SGD([adv_patch_cpu], momentum=0.9, lr=self.config.start_learning_rate)
             scheduler = optim.lr_scheduler.MultiStepLR(optimizer1, milestones=[10, 25, 60, 100, 190], gamma=0.5,
@@ -141,12 +135,6 @@ class PatchTrainer(object):
                 labels_batch = labels_batch.cuda()
                 people_boxes = people_boxes.cuda()
                 adv_patch = adv_patch_cpu.cuda()
-                adv_mask = adv_mask_cpu.cuda()
-                # 隐式训练 rgb
-                # adv_patch = mask_fft(adv_patch, adv_mask).squeeze(0)
-                # 隐式训练 ycbcr -》 前面的阶段使用frequency attention进行引导
-                if epoch < 7:
-                    adv_patch = mask_fft2(adv_patch, adv_mask).squeeze(0)
                 if self.is_cmyk:
                     adv_patch = CMYK2RGB(adv_patch)
                 # Attach the attack image to the clothing
@@ -189,7 +177,7 @@ class PatchTrainer(object):
                 if i_batch % 699 == 0:
                     iteration = epoch_length * epoch + i_batch
                     self.writer.add_image('adv-patch', adv_patch.clone().cpu(), iteration)
-                    self.writer.add_image('frequency-attention', adv_mask.clone().cpu(), iteration)
+                    # self.writer.add_image('frequency-attention', adv_mask.clone().cpu(), iteration)
 
                 del adv_batch_t, p_img_batch, det_loss, tv_loss, loss1, loss
 
@@ -205,7 +193,7 @@ class PatchTrainer(object):
                     adv = CMYK2RGB(adv)
                 else:
                     adv = adv_patch.clone()
-                    frequency_attention_mask = adv_mask.clone()
+                    # frequency_attention_mask = adv_mask.clone()
 
                 # calculate ap50
                 ap = self.patch_evaluator(adv, 0.5)
@@ -231,11 +219,7 @@ class PatchTrainer(object):
                         adv_cmyk.save(name2)
                 if float(ASR) > max_asr:
                     name = os.path.join(self.log_path, str(float(ASR) * 100)[:4] + '_asr')
-                    name2 = os.path.join(self.log_path, str(float(ASR) * 100)[:4] + '_asr_mask')
                     torchvision.utils.save_image(adv, name + '.png')
-                    torchvision.utils.save_image(frequency_attention_mask, name2 + '.png')
-                    # torch2raw(adv.cpu(), name + '.raw')
-                    torch.save(adv_mask, name2 + '.pt')
                     torch.save(adv, name + '.pt')
                     max_asr = float(ASR)
 

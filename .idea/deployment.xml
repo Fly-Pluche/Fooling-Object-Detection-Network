@@ -12,7 +12,7 @@
       <paths name="ray@10.12.1.147:22 password">
         <serverdata>
           <mappings>
-            <mapping deploy="/home/disk2/ray/workspace/Fly_Pluche" local="$PROJECT_DIR$" web="/" />
+            <mapping deploy="/home/disk2/ray/workspace/coronapolvo/attack" local="$PROJECT_DIR$" web="/" />
           </mappings>
           <excludedPaths>
             <excludedPath path="/home/disk2/ray/workspace/coronapolvo/attack/net/yolov3/model_data/yolo_weight_voc_608.pth" />
