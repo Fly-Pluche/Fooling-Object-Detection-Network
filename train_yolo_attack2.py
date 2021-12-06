@@ -31,7 +31,7 @@ class PatchTrainer(object):
         self.model_ = Yolov3(self.config.model_path, self.config.model_image_size, self.config.classes_path)
         self.model_.set_image_size(self.config.img_size[0])
         # self.name = '四角 无frequency loss'
-        self.name = '八角 mask_FFT_隐式训练-18step-lr=0.005 ycbcr[finial-in-pre-7-epoch]'
+        self.name = '八角 mask_FFT_隐式训练-18step-lr=0.005 rgb[finial-pre-7]'
         self.log_path = self.config.log_path
         self.writer = self.init_tensorboard(name='base')
         self.init_logger()
@@ -146,7 +146,7 @@ class PatchTrainer(object):
                 # adv_patch = mask_fft(adv_patch, adv_mask).squeeze(0)
                 # 隐式训练 ycbcr -》 前面的阶段使用frequency attention进行引导
                 if epoch < 7:
-                    adv_patch = mask_fft2(adv_patch, adv_mask).squeeze(0)
+                    adv_patch = mask_fft(adv_patch, adv_mask).squeeze(0)
                 if self.is_cmyk:
                     adv_patch = CMYK2RGB(adv_patch)
                 # Attach the attack image to the clothing
