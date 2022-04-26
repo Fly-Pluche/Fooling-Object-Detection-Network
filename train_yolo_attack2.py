@@ -31,7 +31,7 @@ class PatchTrainer(object):
         self.model_ = Yolov3(self.config.model_path, self.config.model_image_size, self.config.classes_path)
         self.model_.set_image_size(self.config.img_size[0])
         # self.name = '四角 无frequency loss'
-        self.name = '八角 mask_FFT_隐式训练-18step-lr=0.005 rgb[finial-pre-7]'
+        self.name = '八角 mask_FFT_隐式训练-18step-lr=0.005 ycbcr[finial-pre-15]'
         self.log_path = self.config.log_path
         self.writer = self.init_tensorboard(name='base')
         self.init_logger()
@@ -145,8 +145,8 @@ class PatchTrainer(object):
                 # 隐式训练 rgb
                 # adv_patch = mask_fft(adv_patch, adv_mask).squeeze(0)
                 # 隐式训练 ycbcr -》 前面的阶段使用frequency attention进行引导
-                if epoch < 7:
-                    adv_patch = mask_fft(adv_patch, adv_mask).squeeze(0)
+                if epoch < 15:
+                    adv_patch = mask_fft2(adv_patch, adv_mask).squeeze(0)
                 if self.is_cmyk:
                     adv_patch = CMYK2RGB(adv_patch)
                 # Attach the attack image to the clothing
@@ -154,12 +154,7 @@ class PatchTrainer(object):
                 p_img_batch = self.patch_applier(image_batch, adv_batch_t)
                 p_img_batch = F.interpolate(p_img_batch, (self.config.img_size[1], self.config.img_size[0]),
                                             mode='bilinear')
-                # calculate each part of the loss
-                det_loss = torch.mean(self.max_extractor(self.model_, p_img_batch))
-                tv_loss = self.total_variation(adv_patch)
-
-                print()
-                frequency_loss = 0
+                # calculate each part of the lossle
                 logging.info(
                     f'epoch: {epoch} iter: {i_batch} |det loss: {det_loss},tv loss:{tv_loss},frequency loss:{frequency_loss}')
 

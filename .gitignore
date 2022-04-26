@@ -11,3 +11,5 @@ vedios
 deepfooling
 *.pth
 *.whl
+__pycache__
+.idea

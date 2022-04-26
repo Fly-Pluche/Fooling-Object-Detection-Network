@@ -12,7 +12,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 from .nets.yolo import YoloBody
 from .utils.utils import (DecodeBox, letterbox_image, non_max_suppression,
-                         yolo_correct_boxes)
+                          yolo_correct_boxes)
 
 
 # --------------------------------------------#

@@ -7,7 +7,7 @@ from torchvision.transforms import functional
 from detectron2.data import MetadataCatalog
 
 things_color = [
-    (0.5620136544122049, 0.34798600168805305, 0.5101669350565001),
+    (0.79921628955562, 0.39925182470732773, 0.23770945239727087),
     (0.7050996411400894, 0.4790714684318812, 0.18126723577942236),
     (0.4920739217158292, 0.25734558963187026, 0.5765658668068645),
     (0.7408697051928943, 0.3288411136938306, 0.43075401433146226),
@@ -21,7 +21,7 @@ things_color = [
     (0.646167514379597, 0.3207713243164772, 0.5005885420767506),
     (0.6419006252854835, 0.296095014272689, 0.5195782975493075),
     (0.681736323916992, 0.4368312357472623, 0.3462844260220759),
-    (0.7545460308736902, 0.19670088338885727, 0.5043617886658123),
+    (0.945460308736902, 0.9670088338885727, 0.5043617886658123),
     (0.8366144082057538, 0.22158527604555683, 0.41061292803795696),
     (0.8824937576967857, 0.06998876115350218, 0.40183568089309674),
     (0.772945178088269, 0.413112978624738, 0.26445579360952765),
@@ -91,7 +91,7 @@ things_color = [
 
 
 class Visualizer_(Visualizer):
-    def __init__(self, img, model, threshold=0.5, only_classes=14,mode='tensor'):
+    def __init__(self, img, model, threshold=0.5, only_classes=14, mode='tensor'):
         """
         Args:
             img: one image (support tensor and rgb np array)
@@ -104,7 +104,7 @@ class Visualizer_(Visualizer):
             img_rgb = img
         super(Visualizer_, self).__init__(img_rgb, MetadataCatalog.get(model.cfg.DATASETS.TRAIN[0]))
         self.threshold = threshold
-        self.only_classes=only_classes
+        self.only_classes = only_classes
 
     def tensor2rgb(self, img):
         """
@@ -138,9 +138,9 @@ class Visualizer_(Visualizer):
         classes = classes[scores >= self.threshold]
         scores = scores[scores >= self.threshold]
         if self.only_classes:
-            boxes = boxes[classes==self.only_classes]
-            scores = scores[classes==self.only_classes]
-            classes = classes[classes==self.only_classes]
+            boxes = boxes[classes == self.only_classes]
+            scores = scores[classes == self.only_classes]
+            classes = classes[classes == self.only_classes]
         else:
             boxes = boxes[classes < 21]
             scores = scores[classes < 21]
@@ -150,15 +150,15 @@ class Visualizer_(Visualizer):
         # classes = classes[classes=self.useless_classes]
         classes = classes.int()
         labels = _create_text_labels(classes, scores, self.metadata.get("thing_classes", None))
-        alpha = 0.5
+        alpha = 0.9
         colors = [
             things_color[c] for c in classes
         ]
         self.overlay_instances(
             boxes=boxes,
             labels=labels,
+            assigned_colors=colors,
             alpha=alpha,
-            assigned_colors=colors
         )
 
         return self.output

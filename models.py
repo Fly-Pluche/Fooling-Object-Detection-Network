@@ -20,11 +20,10 @@ from utils.utils import boxes_scale
 from utils.visualizer import Visualizer_
 from net.yolov3 import yolo
 from net.yolov3.yolo import YoloBody
+from net.yolov4.yolo import YOLO as YOLOv4
 from net.yolov3.utils.utils import (DecodeBox, letterbox_image, non_max_suppression,
                                     yolo_correct_boxes)
-
-
-# import mmcv
+from net.retinanet.retinanet import Retinanet
 
 
 # import os
@@ -34,6 +33,7 @@ class BaseModel(nn.Module):
     def __init__(self, model, load_model=True):
         super(BaseModel, self).__init__()
         self.output = None
+
         if model is not None:
             self.cfg = get_cfg()
             self.cfg.merge_from_file(model_zoo.get_config_file(model))
@@ -61,13 +61,14 @@ class BaseModel(nn.Module):
         """
         return self.default_predictor_(img)
 
-    def visual_instance_predictions(self, img, output, mode='tensor', threshold=0.5):
+    def visual_instance_predictions(self, img, output, mode='tensor', threshold=0.5, only_class=14):
         """
         draw instance boxes on the image
         """
-        v = Visualizer_(img, self, threshold=threshold, mode=mode)
-        output = output["instances"].to('cpu')
-        out = v.draw_instance_predictions(output)
+        with torch.no_grad():
+            v = Visualizer_(img, self, threshold=threshold, mode=mode, only_classes=only_class)
+            output = output["instances"].to('cpu')
+            out = v.draw_instance_predictions(output)
         return out.get_image()
 
     def trainer(self, train_datasets_name, num_workers=2, img_per_batch=2, base_lr=1e-3, max_iter=300,
@@ -121,14 +122,15 @@ class FasterRCNN(BaseModel):
         model = "COCO-Detection/faster_rcnn_X_101_32x8d_FPN_3x.yaml"
         super(FasterRCNN, self).__init__(model)
         self.model_name = 'FasterRCNN'
+        self.people_index = 0
 
 
 # retina net r101
-class RetinaNet(BaseModel):
-    def __init__(self):
-        model = "COCO-Detection/retinanet_R_101_FPN_3x.yaml"
-        super(RetinaNet, self).__init__(model)
-        self.model_name = 'RetinaNet'
+# class RetinaNet(BaseModel):
+#     def __init__(self):
+#         model = "COCO-Detection/retinanet_R_101_FPN_3x.yaml"
+#         super(RetinaNet, self).__init__(model)
+#         self.model_name = 'RetinaNet'
 
 
 # fast rcnn
@@ -200,7 +202,7 @@ class Yolov3(BaseModel):
     def __init__(self, model_path=None, image_size=None, classes_path=None):
 
         self.__dict__.update(self._defaults)
-
+        self.img_size = image_size
         self.model = None
         if model_path is not None:
             self.model_path = model_path
@@ -357,16 +359,166 @@ class Yolov3(BaseModel):
         return self.yolo_predictor(img)
 
 
+class Yolov4(BaseModel):
+    _defaults = {
+        "model_path": '/home/disk2/ray/workspace/Fly_Pluche/yolov4-pytorch/logs/ep009-loss0.107-val_loss0.058.pth',
+        "anchors_path": './net/yolov4/model_data/yolo_anchors.txt',
+        "classes_path": './net/yolov4/model_data/voc_classes.txt',
+        "input_shape": [608, 608],
+        "confidence": 0.3,
+        "iou": 0.3,
+        "cuda": True,
+        "letterbox_image": False,
+        "confidence_predict": 0.5,
+    }
+
+    def __init__(self, model_path=None, image_size=None, classes_path=None):
+        super(Yolov4, self).__init__('PascalVOC-Detection/faster_rcnn_R_50_C4.yaml', False)
+        if model_path is not None:
+            self._defaults['model_path'] = model_path
+        self.model = YOLOv4(self._defaults)
+        self.model_name = 'Yolov4'
+        self.__dict__.update(self._defaults)
+        self.image_size = None
+        self.people_index = 14
+
+    def yolo_predictor(self, image, nms=False):
+        """
+        use yolo model to predict a image
+        input: torch tensor [3,w,h], Pixel value range [0,1]
+        """
+        img_size = image.size()
+        # resize the input image
+        input_img = F.interpolate(image.unsqueeze(0), size=self.input_shape[0], mode='bilinear')
+        # [[x1, y1, x2, y2, confidence, class]]
+        output = self.model.detect(input_img, nms=nms)[0]
+        result = Instances((img_size[0], img_size[1]))
+        if output is not None:
+            pred_boxes = boxes_scale(output[:, 0:4], (self.input_shape[0], self.input_shape[1]),
+                                     (img_size[1], img_size[2]))
+            pred_boxes[pred_boxes < 0] = 0
+            pred_boxes[pred_boxes > img_size[1]] = img_size[1]
+            boxes = Boxes(pred_boxes)
+            obj_conf = output[:, 4]
+            class_conf = output[:, 5]
+            pred_classes = output[:, 6]
+        else:
+            pred_boxes = torch.tensor([], device='cuda')
+            boxes = Boxes(pred_boxes)
+            obj_conf = torch.tensor([], device='cuda')
+            class_conf = torch.tensor([], device='cuda')
+            pred_classes = torch.tensor([], device='cuda')
+        # pred_classes = pred_classes.type(torch.int)
+        result.set("pred_boxes", boxes.clone())
+        result.set("pred_classes", pred_classes.clone().int())
+        result.set("scores", class_conf.clone())
+        result.set("obj_conf", obj_conf.clone())
+        return {"instances": result}
+
+    def forward(self, image, nms=False):
+        return self.yolo_predictor(image, nms)
+
+    @torch.no_grad()
+    def default_predictor(self, img):
+        """
+        directly predict cv2/PIL image
+        img: a.json image read by cv2 or PIL
+        """
+        if type(img) == PIL.JpegImagePlugin.JpegImageFile:
+            img = functional.pil_to_tensor(img) / 255.0
+        else:
+            img = functional.to_tensor(img) / 255.0
+        return self.yolo_predictor(img)
+
+
+class RetinaNet(BaseModel):
+    _defaults = {
+        "model_path": '/home/disk2/ray/workspace/coronapolvo/attack/net/retinanet/model_data/retinanet_resnet50.pth',
+        "anchors_path": './net/yolov4/model_data/yolo_anchors.txt',
+        "classes_path": './net/yolov4/model_data/voc_classes.txt',
+        "input_shape": [600, 600],
+        "confidence": 0.3,
+        "nms_iou": 0.3,
+        "cuda": True,
+        "letterbox_image": False,
+        "confidence_predict": 0.5,
+    }
+
+    def __init__(self, model_path=None, image_size=None, classes_path=None):
+        super(RetinaNet, self).__init__('PascalVOC-Detection/faster_rcnn_R_50_C4.yaml', False)
+        if model_path is not None:
+            self._defaults['model_path'] = model_path
+        self.model = Retinanet(self._defaults)
+        self.model_name = 'RetinaNet'
+        self.__dict__.update(self._defaults)
+        self.image_size = None
+        self.people_index = 14
+
+    def retina_predictor(self, image, nms=False):
+        """
+        use yolo model to predict a image
+        input: torch tensor [3,w,h], Pixel value range [0,1]
+        """
+        img_size = image.size()
+        # resize the input image
+        input_img = F.interpolate(image.unsqueeze(0), size=self.input_shape[0], mode='bilinear')
+        # [[x1, y1, x2, y2, confidence, class]]
+        output = self.model.detect(input_img, nms=nms)[0]
+        result = Instances((img_size[0], img_size[1]))
+        if output is not None:
+            pred_boxes = boxes_scale(output[:, 0:4], (self.input_shape[0], self.input_shape[1]),
+                                     (img_size[1], img_size[2]))
+            pred_boxes[pred_boxes < 0] = 0
+            pred_boxes[pred_boxes > img_size[1]] = img_size[1]
+            boxes = Boxes(pred_boxes)
+            obj_conf = output[:, 4]
+            class_conf = output[:, 4]
+            pred_classes = output[:, 5]
+        else:
+            pred_boxes = torch.tensor([], device='cuda')
+            boxes = Boxes(pred_boxes)
+            obj_conf = torch.tensor([], device='cuda')
+            class_conf = torch.tensor([], device='cuda')
+            pred_classes = torch.tensor([], device='cuda')
+        # pred_classes = pred_classes.type(torch.int)
+        result.set("pred_boxes", boxes.clone())
+        result.set("pred_classes", pred_classes.clone().int())
+        result.set("scores", class_conf.clone())
+        result.set("obj_conf", obj_conf.clone())
+        return {"instances": result}
+
+    def forward(self, image, nms=False):
+        return self.retina_predictor(image, nms)
+
+    @torch.no_grad()
+    def default_predictor(self, img):
+        """
+        directly predict cv2/PIL image
+        img: a.json image read by cv2 or PIL
+        """
+        if type(img) == PIL.JpegImagePlugin.JpegImageFile:
+            img = functional.pil_to_tensor(img) / 255.0
+        else:
+            img = functional.to_tensor(img) / 255.0
+        return self.retina_predictor(img)
+
+
 if __name__ == '__main__':
+    import matplotlib.pyplot as plt
+
     img = Image.open('./images/aaa.jpg')
     # img = img.resize((416, 416))
-    yolov3 = Yolov3()
+    yolov4 = RetinaNet()
     img = functional.pil_to_tensor(img) / 255.0
     img = img.cuda()
-    img = img.unsqueeze(0)
-    output = yolov3.model(img)
+    img.requires_grad_(True)
+    print(img)
+    # img = img.unsqueeze(0)
+    output = yolov4.retina_predictor(img, nms=True)
     print(output)
-    # img = yolov3.visual_instance_predictions(img, output, mode='tensor')
+    img2 = yolov4.visual_instance_predictions(img, output, mode='tensor', only_class=0)
+    plt.imshow(img2)
+    plt.show()
     # import matplotlib.pyplot as plt
     #
     # plt.pytorch_imshow(img)

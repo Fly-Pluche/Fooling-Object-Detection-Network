@@ -10,6 +10,7 @@
             </list>
           </settings>
         </remote-mappings>
+        <remote-mappings server-id="python@sftp://ray@10.12.1.147:22/home/ray/miniconda3/envs/sonder/bin/python3.7" />
       </list>
     </list>
   </component>

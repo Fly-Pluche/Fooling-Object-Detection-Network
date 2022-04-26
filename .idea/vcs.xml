@@ -4,6 +4,9 @@
     <mapping directory="$PROJECT_DIR$" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/PyTorch-YOLOv3" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/PyTorch-YOLOv3/coco" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/net/retinanet" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/net/yolov4" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/net/yolov4-pytorch" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/yolo/yolov3" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/yolov3" vcs="Git" />
   </component>

@@ -120,17 +120,22 @@ class BaseASR(nn.Module):
                         p_img_batch = self.patch_applier(image_batch, adv_batch_t)
                 else:
                     p_img_batch = image_batch
+                # img = np.asarray(functional.to_pil_image(image_batch[0].cpu()))
+                # plt.imshow(img)
+                # plt.show()
                 image_batch = F.interpolate(p_img_batch, (self.image_size[0], self.image_size[1]))
                 # images = torch.unbind(image_batch, dim=0)
                 for idx in range(image_batch.size(0)):
                     image = image_batch[idx]
-                    if self.model.model_name == 'Yolov3':
+                    if self.model.model_name in ['Yolov3', 'Yolov4', 'RetinaNet']:
                         outputs = self.model(image, nms=True)
                     else:
                         outputs = self.model(image)
                     outputs = outputs['instances']
                     boxes = outputs.pred_boxes.tensor
-                    boxes = boxes[outputs.pred_classes == self.model.people_index, :]
+                    boxes = boxes[(outputs.pred_classes == self.model.people_index) & (outputs.scores > 0.5), :]
+                    # outputs.scores = outputs.scores[outputs.pred_classes == self.model.people_index]
+                    # boxes = boxes[outputs.scores > 0.5, :]
                     # if boxes.device != 'cpu':
                     #     boxes = boxes.cpu()
                     predicted_dicts.append({

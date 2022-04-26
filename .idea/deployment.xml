@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
-  <component name="PublishConfigData" autoUpload="Always" serverName="ray@10.12.1.147:22 password" remoteFilesAllowedToDisappearOnAutoupload="false" showDialogOnRemoteDnD="false" autoUploadExternalChanges="true" showAutoUploadSettingsWarning="false">
+  <component name="PublishConfigData" autoUpload="On explicit save action" serverName="ray@10.12.1.147:22 password" remoteFilesAllowedToDisappearOnAutoupload="false" showDialogOnRemoteDnD="false" autoUploadExternalChanges="true" showAutoUploadSettingsWarning="false">
     <serverData>
       <paths name="ray@10.0.0.5:22 password">
         <serverdata>
@@ -20,6 +20,6 @@
         </serverdata>
       </paths>
     </serverData>
-    <option name="myAutoUpload" value="ALWAYS" />
+    <option name="myAutoUpload" value="ON_EXPLICIT_SAVE" />
   </component>
 </project>

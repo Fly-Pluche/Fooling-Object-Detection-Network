@@ -262,15 +262,6 @@ class TotalVariation(nn.Module):
         tvcomp2 = torch.sum(torch.sum(tvcomp2, 0), 0)
         tv = tvcomp1 + tvcomp2
 
-<<<<<<< HEAD
-        tvcomp3= torch.sum(torch.abs(adv_patch[:, 1:, 1:] - adv_patch[:, :-1, :-1] + 0.000001), 0)
-        tvcomp3 = torch.sum(torch.sum(tvcomp3, 0), 0)
-
-        tvcomp4= torch.sum(torch.abs(adv_patch[:, 1:, :-1] - adv_patch[:, :-1, 1:] + 0.000001), 0)
-        tvcomp4 = torch.sum(torch.sum(tvcomp4, 0), 0)
-
-        tv=tv+tvcomp3+tvcomp4
-=======
         tvcomp3 = torch.sum(torch.abs(adv_patch[:, 1:, 1:] - adv_patch[:, :-1, :-1] + 0.000001), 0)
         tvcomp3 = torch.sum(torch.sum(tvcomp3, 0), 0)
         tv = tv + tvcomp3
@@ -278,7 +269,6 @@ class TotalVariation(nn.Module):
         tvcomp4 = torch.sum(torch.abs(adv_patch[:, 1:, :-1] - adv_patch[:, :-1, 1:] + 0.000001), 0)
         tvcomp4 = torch.sum(torch.sum(tvcomp4, 0), 0)
         tv = tv + tvcomp4
->>>>>>> b980a1c7df77565fa585e2db4fef828ab5abb447
 
         return tv / torch.numel(adv_patch)
 
@@ -295,11 +285,8 @@ class FrequencyLoss(nn.Module):
         img_h = self.config.patch_size
         img_w = self.config.patch_size
         lpf = torch.zeros((img_h, img_h))
-<<<<<<< HEAD
-        R = (img_h + img_w) // 4.5
-=======
+
         R = (img_h + img_w) // self.config.fft_size
->>>>>>> b980a1c7df77565fa585e2db4fef828ab5abb447
         for x in range(img_w):
             for y in range(img_h):
                 if ((x - (img_w - 1) / 2) ** 2 + (y - (img_h - 1) / 2) ** 2) < (R ** 2):
@@ -868,6 +855,39 @@ class PatchEvaluator(nn.Module):
         ground_truths = copy.deepcopy(self.ground_truths)
         ap = self.calculator.ap(self.class_id, predicts, ground_truths, self.image_sizes, threshold=threshold)
         return ap
+
+    def save_all_test(self, adv_patch, root_path, clean=False):
+        with torch.no_grad():
+            for id, item in enumerate(tqdm(self.data_loader)):
+                if self.use_deformation:
+                    image_batch, clothes_boxes_batch, _, _, landmarks_batch, segmentations_batch = item
+                    clothes_boxes_batch = clothes_boxes_batch.cuda()
+                    segmentations_batch = segmentations_batch.cuda()
+                    landmarks_batch = landmarks_batch.cuda()
+                else:
+                    image_batch, people_boxes, labels_batch = item
+                    people_boxes = people_boxes.cuda()
+                    labels_batch = labels_batch.cuda()
+                image_batch = image_batch.cuda()
+
+                if not clean:
+                    adv_patch = adv_patch.cuda()
+                    if self.use_deformation:
+                        adv_batch_t, adv_batch_mask_t = self.patch_transformer(adv_patch, clothes_boxes_batch,
+                                                                               segmentations_batch, landmarks_batch,
+                                                                               image_batch)
+                        p_img_batch = self.patch_applier(image_batch, adv_batch_t, adv_batch_mask_t)
+                    else:
+                        adv_batch_t = self.patch_transformer(adv_patch, people_boxes, labels_batch)
+                        p_img_batch = self.patch_applier(image_batch, adv_batch_t)
+                else:
+                    p_img_batch = image_batch
+                p_img_batch = F.interpolate(p_img_batch, (self.p_config.img_size[0], self.p_config.img_size[1]),
+                                            mode='bilinear')
+                images = torch.unbind(p_img_batch, dim=0)
+                for idx, image in enumerate(images):
+                    path = os.path.join(root_path, str(id) + '.png')
+                    save_predict_image_torch(self.model, image, path)
 
     def save_visual_images(self, adv_patch, root_path, epoch, clean=False):
         file_name = f"{epoch}-"

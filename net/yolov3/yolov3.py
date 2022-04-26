@@ -4,7 +4,7 @@ import torch.nn as nn
 
 class YOLOV3(nn.Module):
     def __init__(self):
-        super(YOLOV3, self).__init__(N)
+        super(YOLOV3, self).__init__()
 
     def _get_class(self):
         classes_path = os.path.expanduser(self.classes_path)

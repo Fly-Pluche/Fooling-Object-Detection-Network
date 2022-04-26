@@ -62,11 +62,7 @@ class ListDataset(Dataset):
         labels: [-1,4]
     """
 
-<<<<<<< HEAD
-    def     __init__(self, txt, number=None, range_=None, only_people=True, enhance=True):
-=======
-    def __init__(self, txt, number=None, enhancd=True,range_=None, only_people=True):
->>>>>>> b980a1c7df77565fa585e2db4fef828ab5abb447
+    def __init__(self, txt, number=None, enhancd=True, range_=None, only_people=True):
         super(ListDataset, self).__init__()
         self.parser = ParseTools()
         self.configs = patch_configs['base']()
@@ -79,11 +75,7 @@ class ListDataset(Dataset):
         self.max_lab = 11
         self.add_noise = AddPepperNoise(0.9)
         self.only_people = only_people
-<<<<<<< HEAD
-        self.enhance = enhance
-=======
-        self.enhancd=enhancd
->>>>>>> b980a1c7df77565fa585e2db4fef828ab5abb447
+        self.enhancd = enhancd
 
     def __getitem__(self, id):
         image_path = self.file_list[id]
@@ -98,19 +90,11 @@ class ListDataset(Dataset):
         image, boxes = self.pad_and_scale(image_info['image'], boxes)
         boxes, labels = self.pad_lab_and_boxes(boxes, labels)
         # image enhance
-<<<<<<< HEAD
-        if self.enhance:
-            image = transforms.ColorJitter(brightness=0.5)(image)
-            image = transforms.ColorJitter(contrast=0.5)(image)
-            image = transforms.ColorJitter(hue=0.5)(image)
-            image = transforms.ToTensor()(image)
-=======
         if self.enhancd:
             image = transforms.ColorJitter(brightness=0.5)(image)
             image = transforms.ColorJitter(contrast=0.5)(image)
             image = transforms.ColorJitter(hue=0.5)(image)
         image = transforms.ToTensor()(image)
->>>>>>> b980a1c7df77565fa585e2db4fef828ab5abb447
         return image, boxes, labels
 
     def pad_lab_and_boxes(self, boxes, labels):

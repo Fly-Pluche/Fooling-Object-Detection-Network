@@ -20,8 +20,9 @@ class BaseConfig(object):
         """
         set the defaults
         """
+
         config = configparser.ConfigParser()
-        config.read('./config/local.cfg')
+        config.read('./config/local2.cfg')
         self.config_file = "/home/corona/attack/PaperCode/configs/yolo_person.cfg"
         self.weight_file = "/home/corona/attack/PyTorch-YOLOv3/good_weights/yolov3_ckpt_98.pth"
         self.txt_path = '/home/corona/datasets/WiderPerson/train/train2.txt'
